@@ -2,12 +2,12 @@
 
 Gestión de presupuestos para reformistas: clientes, catálogo de precios por proveedor, presupuestos con capítulos y asistente IA, firma del cliente, facturas y control de acceso por roles (admin/empleado).
 
-Fase 1 de la puesta en producción: Next.js 14 + PostgreSQL + Prisma + NextAuth, con Docker listo para desplegar. Fuera de esta fase quedan: email real por Resend, PDF en servidor con Puppeteer, importador BC3/Excel de precios, Verifactu y PWA/Android.
+Fase 1 de la puesta en producción: Next.js 14 + PostgreSQL + Prisma + NextAuth. Dos vías de despliegue: gratis en Vercel + Neon, o con Docker en tu propio VPS. Fuera de esta fase quedan: email real por Resend, PDF en servidor con Puppeteer, importador BC3/Excel de precios, Verifactu y PWA/Android.
 
 ## Requisitos
 
 - Node.js 20+
-- Docker y Docker Compose (para Postgres local y para el despliegue en el VPS)
+- Docker y Docker Compose (solo para Postgres en desarrollo local, y para el despliegue en VPS — no hace falta para el despliegue gratis en Vercel)
 
 ## Desarrollo local
 
@@ -24,6 +24,36 @@ Abre http://localhost:3000 — como la base de datos está vacía, te llevará d
 Si además quieres datos de ejemplo (proveedores, catálogo de precios, un cliente) para trastear en local, `npm run db:seed` los añade — no crea usuarios si ya tienes uno, y si la base está vacía crea también dos usuarios de prueba imprimiendo sus contraseñas temporales por consola.
 
 Genera `NEXTAUTH_SECRET` con `openssl rand -base64 32`. Consigue `GEMINI_API_KEY` en aistudio.google.com/apikey (capa gratuita) — sin ella, el asistente IA de presupuestos no funcionará (el resto de la app sí).
+
+## Despliegue gratis (Vercel + Neon)
+
+Vía sin coste: hosting en Vercel (gratis para este volumen) + Postgres en Neon (capa gratuita) + subdominio gratis tipo `tu-proyecto.vercel.app`. No hace falta Docker para esto — Vercel construye directo desde el repositorio de Git.
+
+1. **Sube el código a GitHub**: crea una cuenta en github.com si no tienes, crea un repositorio nuevo (puede ser privado) y sube este proyecto:
+   ```bash
+   git remote add origin https://github.com/TU-USUARIO/reformapro.git
+   git branch -M main
+   git push -u origin main
+   ```
+2. **Crea la base de datos en Neon**: cuenta gratis en neon.tech → "New Project". Te da dos cadenas de conexión distintas — cópialas, las necesitas en el paso siguiente:
+   - La que tiene `-pooler` en el host → es tu `DATABASE_URL`.
+   - La que NO lleva `-pooler` → es tu `DIRECT_URL`.
+3. **Crea el proyecto en Vercel**: cuenta gratis en vercel.com (puedes entrar con tu cuenta de GitHub) → "Add New Project" → importa el repositorio que acabas de subir.
+4. **Variables de entorno** (en la pantalla de configuración del proyecto, antes de darle a "Deploy", o después en Settings → Environment Variables):
+   - `DATABASE_URL` y `DIRECT_URL` — las de Neon del paso 2.
+   - `NEXTAUTH_SECRET` — genera uno con `openssl rand -base64 32`.
+   - `NEXTAUTH_URL` — la URL que te va a dar Vercel, tipo `https://reformapro.vercel.app` (si no la sabes aún, despliega una vez, cópiala de la pantalla del proyecto, y vuelve a poner esta variable con el valor correcto).
+   - `GEMINI_API_KEY` — la de aistudio.google.com/apikey.
+5. **Build Command**: en Settings → Build & Development Settings, cambia el comando de build a:
+   ```
+   npx prisma migrate deploy && npm run build
+   ```
+   Así cada vez que subas cambios de esquema, se aplican solos antes de construir la app (igual que hace el contenedor Docker en la vía del VPS).
+6. Dale a **Deploy**. Cuando termine, abre la URL `https://tu-proyecto.vercel.app`: al no haber ningún usuario, te lleva directo a la pantalla de primer arranque para crear tu cuenta de administrador y los datos de tu empresa.
+7. Para actualizar la app más adelante: `git push` a `main` — Vercel despliega solo con cada push.
+8. Si más adelante quieres un dominio propio en vez del subdominio gratis: cómpralo donde quieras (Namecheap, Porkbun, nic.es para `.es`...) y añádelo en Vercel → Settings → Domains. Solo cambia el dominio, nada del código.
+
+**Límites de la capa gratuita** a tener en cuenta: Neon pausa la base de datos tras un rato sin uso (se reactiva sola en el primer request siguiente, con un pequeño retraso de un par de segundos) y tiene un tope de almacenamiento (0.5 GB, de sobra para años de presupuestos y facturas de un negocio pequeño). Vercel gratis no admite uso comercial de alto tráfico, pero para el uso normal de una reformista esto no se acerca ni de lejos al límite.
 
 ## Despliegue en tu VPS
 
