@@ -1,0 +1,236 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  crearProveedor,
+  actualizarProveedor,
+  crearProducto,
+  actualizarProducto,
+  borrarProducto,
+  type ProductoInput,
+  type ProveedorInput,
+} from "./actions";
+import { eur } from "@/lib/format";
+
+type Proveedor = { id: string; nombre: string; web: string | null };
+type Producto = ProductoInput & { id: string; fecha: string };
+
+const UNIDADES = ["ud", "m²", "ml", "kg", "L", "h"];
+
+export default function PreciosClient({
+  proveedores,
+  productos,
+  isAdmin,
+}: {
+  proveedores: Proveedor[];
+  productos: Producto[];
+  isAdmin: boolean;
+}) {
+  const router = useRouter();
+  const [modalProv, setModalProv] = useState<{ id: string | null; data: ProveedorInput } | null>(null);
+  const [modal, setModal] = useState<{ id: string | null; data: ProductoInput } | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+
+  const abrirNuevoProveedor = () => setModalProv({ id: null, data: { nombre: "", web: "" } });
+  const abrirEditarProveedor = (pr: Proveedor) => setModalProv({ id: pr.id, data: { nombre: pr.nombre, web: pr.web || "" } });
+  const cerrarProveedor = () => { setModalProv(null); setError(""); };
+
+  const guardarProveedor = async () => {
+    if (!modalProv) return;
+    setGuardando(true);
+    setError("");
+    try {
+      if (modalProv.id) await actualizarProveedor(modalProv.id, modalProv.data);
+      else await crearProveedor(modalProv.data);
+      cerrarProveedor();
+      router.refresh();
+    } catch (e: any) {
+      setError(e.message || "No se pudo guardar el proveedor.");
+    }
+    setGuardando(false);
+  };
+
+  const abrirNuevo = () =>
+    setModal({ id: null, data: { provId: proveedores[0]?.id || "", nombre: "", unidad: "ud", precio: 0 } });
+  const abrirEditar = (p: Producto) => setModal({ id: p.id, data: { provId: p.provId, nombre: p.nombre, unidad: p.unidad, precio: p.precio } });
+  const cerrar = () => { setModal(null); setError(""); };
+
+  const guardar = async () => {
+    if (!modal) return;
+    setGuardando(true);
+    setError("");
+    try {
+      if (modal.id) await actualizarProducto(modal.id, modal.data);
+      else await crearProducto(modal.data);
+      cerrar();
+      router.refresh();
+    } catch (e: any) {
+      setError(e.message || "No se pudo guardar el material.");
+    }
+    setGuardando(false);
+  };
+
+  const borrar = async (id: string) => {
+    if (!window.confirm("¿Eliminar este material?")) return;
+    await borrarProducto(id);
+    router.refresh();
+  };
+
+  const nombreProveedor = (id: string) => proveedores.find((p) => p.id === id)?.nombre || "—";
+
+  return (
+    <>
+      <div className="card">
+        <div className="row">
+          <h2 style={{ fontSize: 22 }}>Proveedores</h2>
+          {proveedores.map((pr) => (
+            <span key={pr.id} className="badge b-enviado" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {pr.web ? (
+                <a href={pr.web} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>
+                  {pr.nombre} ↗
+                </a>
+              ) : (
+                pr.nombre
+              )}
+              <button
+                onClick={() => abrirEditarProveedor(pr)}
+                title="Editar proveedor"
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "inherit", fontSize: 12 }}
+              >
+                ✎
+              </button>
+            </span>
+          ))}
+          <div className="spacer" />
+          <button className="btn ghost sm" onClick={abrirNuevoProveedor}>+ Añadir proveedor</button>
+        </div>
+      </div>
+      <div className="card">
+        <div className="row" style={{ marginBottom: 10 }}>
+          <h2 style={{ fontSize: 22 }}>Catálogo de precios</h2>
+          <p className="hint">Actualiza aquí los precios de cada material; la IA los usa como referencia.</p>
+          <div className="spacer" />
+          <button className="btn" disabled={!proveedores.length} onClick={abrirNuevo}>+ Añadir material</button>
+        </div>
+        <table className="t">
+          <thead>
+            <tr>
+              <th>Material</th>
+              <th>Proveedor</th>
+              <th>Precio</th>
+              <th className="hidemob">Actualizado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {productos.map((m) => (
+              <tr key={m.id}>
+                <td>{m.nombre}</td>
+                <td>{nombreProveedor(m.provId)}</td>
+                <td className="linetotal">{eur(m.precio)} / {m.unidad}</td>
+                <td className="hidemob hint">{m.fecha}</td>
+                <td style={{ textAlign: "right" }}>
+                  <button className="btn sm ghost" onClick={() => abrirEditar(m)}>Editar</button>{" "}
+                  {isAdmin && <button className="btn sm red" onClick={() => borrar(m.id)}>Borrar</button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {modalProv && (
+        <div className="modalbg">
+          <div className="modal">
+            <h2 style={{ fontSize: 22, marginBottom: 10 }}>{modalProv.id ? "Editar proveedor" : "Nuevo proveedor"}</h2>
+            <div className="field">
+              <label className="lbl">Nombre</label>
+              <input
+                className="inp"
+                value={modalProv.data.nombre}
+                onChange={(e) => setModalProv({ ...modalProv, data: { ...modalProv.data, nombre: e.target.value } })}
+              />
+            </div>
+            <div className="field">
+              <label className="lbl">Página web (para consultar precios)</label>
+              <input
+                className="inp"
+                placeholder="ej: www.leroymerlin.es"
+                value={modalProv.data.web}
+                onChange={(e) => setModalProv({ ...modalProv, data: { ...modalProv.data, web: e.target.value } })}
+              />
+            </div>
+            {error && <p className="error">{error}</p>}
+            <div className="row">
+              <div className="spacer" />
+              <button className="btn ghost" onClick={cerrarProveedor}>Cancelar</button>
+              <button className="btn" disabled={!modalProv.data.nombre.trim() || guardando} onClick={guardarProveedor}>
+                {guardando ? "Guardando…" : "Guardar proveedor"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal && (
+        <div className="modalbg">
+          <div className="modal">
+            <h2 style={{ fontSize: 22, marginBottom: 10 }}>{modal.id ? "Editar material" : "Nuevo material"}</h2>
+            <div className="field">
+              <label className="lbl">Proveedor</label>
+              <select
+                className="inp"
+                value={modal.data.provId}
+                onChange={(e) => setModal({ ...modal, data: { ...modal.data, provId: e.target.value } })}
+              >
+                {proveedores.map((pr) => (
+                  <option key={pr.id} value={pr.id}>{pr.nombre}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label className="lbl">Nombre del material</label>
+              <input
+                className="inp"
+                value={modal.data.nombre}
+                onChange={(e) => setModal({ ...modal, data: { ...modal.data, nombre: e.target.value } })}
+              />
+            </div>
+            <div className="grid g2">
+              <div className="field">
+                <label className="lbl">Precio (€)</label>
+                <input
+                  className="inp"
+                  type="number"
+                  step="0.01"
+                  value={modal.data.precio}
+                  onChange={(e) => setModal({ ...modal, data: { ...modal.data, precio: Number(e.target.value) } })}
+                />
+              </div>
+              <div className="field">
+                <label className="lbl">Unidad</label>
+                <select
+                  className="inp"
+                  value={modal.data.unidad}
+                  onChange={(e) => setModal({ ...modal, data: { ...modal.data, unidad: e.target.value } })}
+                >
+                  {UNIDADES.map((u) => <option key={u}>{u}</option>)}
+                </select>
+              </div>
+            </div>
+            {error && <p className="error">{error}</p>}
+            <div className="row">
+              <div className="spacer" />
+              <button className="btn ghost" onClick={cerrar}>Cancelar</button>
+              <button className="btn" disabled={!modal.data.nombre.trim() || guardando} onClick={guardar}>
+                {guardando ? "Guardando…" : "Guardar material"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

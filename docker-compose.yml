@@ -1,0 +1,47 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-reformapro}:${POSTGRES_PASSWORD:-reformapro}@db:5432/${POSTGRES_DB:-reformapro}?schema=public
+      DIRECT_URL: postgresql://${POSTGRES_USER:-reformapro}:${POSTGRES_PASSWORD:-reformapro}@db:5432/${POSTGRES_DB:-reformapro}?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "3000"
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reformapro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reformapro}
+      POSTGRES_DB: ${POSTGRES_DB:-reformapro}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reformapro}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

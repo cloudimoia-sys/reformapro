@@ -1,0 +1,141 @@
+generator client {
+  provider      = "prisma-client-js"
+  // "rhel-openssl-3.0.x" es el runtime de las funciones serverless de Vercel;
+  // "native" mantiene el motor correcto para desarrollo local (Windows/Mac/Linux) y Docker.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Conexión "pooled" (con PgBouncer) que usa la app en cada petición — necesaria en
+  // entornos serverless como Vercel, donde cada función abre su propia conexión.
+  url       = env("DATABASE_URL")
+  // Conexión directa (sin pooling), solo para migraciones. En un VPS con Docker,
+  // DIRECT_URL puede ser idéntica a DATABASE_URL sin problema.
+  directUrl = env("DIRECT_URL")
+}
+
+enum Rol {
+  ADMIN
+  EMPLEADO
+}
+
+enum EstadoPresupuesto {
+  BORRADOR
+  ENVIADO
+  APROBADO
+  RECHAZADO
+  FACTURADO
+}
+
+enum EstadoFactura {
+  PENDIENTE
+  PAGADA
+}
+
+model Usuario {
+  id           String   @id @default(cuid())
+  nombre       String
+  email        String   @unique
+  passwordHash String
+  rol          Rol      @default(EMPLEADO)
+  createdAt    DateTime @default(now())
+}
+
+/// Fila única (siempre id = 1) con los datos fiscales de la empresa.
+model Empresa {
+  id         Int     @id @default(1)
+  nombre     String
+  cif        String
+  direccion  String
+  tel        String
+  email      String
+  ivaDefecto Int     @default(10)
+  /// Logo en base64 (data URL), opcional. Solo se muestra en las facturas si está puesto.
+  logo       String?
+}
+
+model Cliente {
+  id           String        @id @default(cuid())
+  nombre       String
+  tel          String?
+  email        String?
+  direccion    String?
+  nif          String?
+  notas        String?
+  createdAt    DateTime      @default(now())
+  presupuestos Presupuesto[]
+  facturas     Factura[]
+}
+
+model Proveedor {
+  id        String     @id @default(cuid())
+  nombre    String
+  web       String?
+  productos Producto[]
+}
+
+model Producto {
+  id        String    @id @default(cuid())
+  provId    String
+  proveedor Proveedor @relation(fields: [provId], references: [id], onDelete: Cascade)
+  nombre    String
+  unidad    String
+  precio    Float
+  fecha     DateTime  @default(now())
+}
+
+model Presupuesto {
+  id         String             @id @default(cuid())
+  numero     String             @unique
+  clienteId  String?
+  cliente    Cliente?           @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  titulo     String
+  fecha      DateTime           @default(now())
+  iva        Int                @default(10)
+  estado     EstadoPresupuesto  @default(BORRADOR)
+  notas      String?
+  firma      String?
+  fechaFirma DateTime?
+  firmaIp    String?
+  autor      String?
+  createdAt  DateTime           @default(now())
+  lineas     LineaPresupuesto[]
+  facturas   Factura[]
+}
+
+model LineaPresupuesto {
+  id            String      @id @default(cuid())
+  presupuestoId String
+  presupuesto   Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
+  capitulo      String?
+  concepto      String
+  descripcion   String?
+  cantidad      Float
+  unidad        String
+  precio        Float
+  /// Descuento en % (0-100) aplicado sobre esta línea (material, mano de obra, lo que sea).
+  descuento     Float       @default(0)
+  orden         Int         @default(0)
+}
+
+model Factura {
+  id            String        @id @default(cuid())
+  numero        String        @unique
+  presupuestoId String?
+  presupuesto   Presupuesto?  @relation(fields: [presupuestoId], references: [id], onDelete: SetNull)
+  clienteId     String?
+  cliente       Cliente?      @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  fecha         DateTime      @default(now())
+  base          Float
+  iva           Int
+  total         Float
+  estado        EstadoFactura @default(PENDIENTE)
+}
+
+/// Contador atómico para numerar presupuestos/facturas (PRE-2026-001, FAC-2026-001...).
+/// id tiene forma "presupuesto:2026" / "factura:2026".
+model Counter {
+  id    String @id
+  value Int    @default(0)
+}
