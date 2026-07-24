@@ -83,6 +83,8 @@ model Producto {
   unidad    String
   precio    Float
   fecha     DateTime  @default(now())
+  /// URL de la ficha del producto en la web del proveedor, para el botón "Comprobar precio".
+  url       String?
 }
 
 model Presupuesto {

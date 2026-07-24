@@ -8,6 +8,7 @@ import {
   crearProducto,
   actualizarProducto,
   borrarProducto,
+  comprobarPrecioProducto,
   type ProductoInput,
   type ProveedorInput,
 } from "./actions";
@@ -17,6 +18,7 @@ type Proveedor = { id: string; nombre: string; web: string | null };
 type Producto = ProductoInput & { id: string; fecha: string };
 
 const UNIDADES = ["ud", "m²", "ml", "kg", "L", "h"];
+const VACIO_PRODUCTO: Omit<ProductoInput, "provId"> = { nombre: "", unidad: "ud", precio: 0, url: "" };
 
 export default function PreciosClient({
   proveedores,
@@ -32,6 +34,8 @@ export default function PreciosClient({
   const [modal, setModal] = useState<{ id: string | null; data: ProductoInput } | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+  const [comprobando, setComprobando] = useState<string | null>(null);
+  const [erroresComprobacion, setErroresComprobacion] = useState<Record<string, string>>({});
 
   const abrirNuevoProveedor = () => setModalProv({ id: null, data: { nombre: "", web: "" } });
   const abrirEditarProveedor = (pr: Proveedor) => setModalProv({ id: pr.id, data: { nombre: pr.nombre, web: pr.web || "" } });
@@ -53,8 +57,9 @@ export default function PreciosClient({
   };
 
   const abrirNuevo = () =>
-    setModal({ id: null, data: { provId: proveedores[0]?.id || "", nombre: "", unidad: "ud", precio: 0 } });
-  const abrirEditar = (p: Producto) => setModal({ id: p.id, data: { provId: p.provId, nombre: p.nombre, unidad: p.unidad, precio: p.precio } });
+    setModal({ id: null, data: { provId: proveedores[0]?.id || "", ...VACIO_PRODUCTO } });
+  const abrirEditar = (p: Producto) =>
+    setModal({ id: p.id, data: { provId: p.provId, nombre: p.nombre, unidad: p.unidad, precio: p.precio, url: p.url } });
   const cerrar = () => { setModal(null); setError(""); };
 
   const guardar = async () => {
@@ -76,6 +81,18 @@ export default function PreciosClient({
     if (!window.confirm("¿Eliminar este material?")) return;
     await borrarProducto(id);
     router.refresh();
+  };
+
+  const comprobarPrecio = async (id: string) => {
+    setComprobando(id);
+    setErroresComprobacion((prev) => ({ ...prev, [id]: "" }));
+    try {
+      await comprobarPrecioProducto(id);
+      router.refresh();
+    } catch (e: any) {
+      setErroresComprobacion((prev) => ({ ...prev, [id]: e.message || "No se pudo comprobar el precio." }));
+    }
+    setComprobando(null);
   };
 
   const nombreProveedor = (id: string) => proveedores.find((p) => p.id === id)?.nombre || "—";
@@ -132,8 +149,16 @@ export default function PreciosClient({
                 <td className="linetotal">{eur(m.precio)} / {m.unidad}</td>
                 <td className="hidemob hint">{m.fecha}</td>
                 <td style={{ textAlign: "right" }}>
+                  {m.url && (
+                    <button className="btn sm ghost" disabled={comprobando === m.id} onClick={() => comprobarPrecio(m.id)}>
+                      {comprobando === m.id ? "Comprobando…" : "Comprobar precio"}
+                    </button>
+                  )}{" "}
                   <button className="btn sm ghost" onClick={() => abrirEditar(m)}>Editar</button>{" "}
                   {isAdmin && <button className="btn sm red" onClick={() => borrar(m.id)}>Borrar</button>}
+                  {erroresComprobacion[m.id] && (
+                    <div className="error" style={{ marginTop: 4, textAlign: "right" }}>{erroresComprobacion[m.id]}</div>
+                  )}
                 </td>
               </tr>
             ))}
@@ -219,6 +244,20 @@ export default function PreciosClient({
                   {UNIDADES.map((u) => <option key={u}>{u}</option>)}
                 </select>
               </div>
+            </div>
+            <div className="field">
+              <label className="lbl">URL de la ficha del producto (opcional)</label>
+              <input
+                className="inp"
+                placeholder="ej: www.tuproveedor.es/producto/..."
+                value={modal.data.url}
+                onChange={(e) => setModal({ ...modal, data: { ...modal.data, url: e.target.value } })}
+              />
+              <p className="hint" style={{ marginTop: 4 }}>
+                Si la guardas, aparece un botón "Comprobar precio" para actualizarlo bajo demanda. Algunas tiendas
+                grandes (Leroy Merlin, Obramat) bloquean esta comprobación automática con protección anti-bots —
+                en esos casos tendrás que mirar el precio a mano y actualizarlo aquí.
+              </p>
             </div>
             {error && <p className="error">{error}</p>}
             <div className="row">

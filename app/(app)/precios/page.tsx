@@ -17,6 +17,7 @@ export default async function PreciosPage() {
     unidad: p.unidad,
     precio: p.precio,
     fecha: p.fecha.toISOString().slice(0, 10) || hoy(),
+    url: p.url ?? "",
   }));
 
   return <PreciosClient proveedores={proveedores} productos={data} isAdmin={user.rol === "ADMIN"} />;
