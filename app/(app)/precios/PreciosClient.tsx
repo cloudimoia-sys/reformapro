@@ -17,7 +17,9 @@ import { eur } from "@/lib/format";
 type Proveedor = { id: string; nombre: string; web: string | null };
 type Producto = ProductoInput & { id: string; fecha: string };
 
-const UNIDADES = ["ud", "m²", "ml", "kg", "L", "h"];
+// m³ para hormigones, excavaciones y rellenos; t para acero y escombro; día para
+// alquiler de maquinaria; pa para partidas alzadas difíciles de medir.
+const UNIDADES = ["ud", "m²", "m³", "ml", "kg", "t", "L", "h", "día", "pa"];
 const VACIO_PRODUCTO: Omit<ProductoInput, "provId"> = { nombre: "", unidad: "ud", precio: 0, url: "" };
 
 export default function PreciosClient({

@@ -44,23 +44,47 @@ export async function POST(req: Request) {
     })
     .join("; ");
 
-  const prompt = `Eres un jefe de obra español experto en mediciones y presupuestos de reformas, que trabaja con el banco de precios del Generador de Precios de la Construcción de CYPE (generadordeprecios.info), sección Rehabilitación. Genera las partidas de un presupuesto con estos datos:
-- Tipo de reforma: ${f.tipo}
+  const prompt = `Eres un jefe de obra español experto en mediciones y presupuestos, y trabajas con la estructura de capítulos de los bancos de precios españoles (Generador de Precios de CYPE, IVE, BCCA). Cubres CUALQUIER trabajo de construcción: desde cambiar un plato de ducha hasta obra nueva, rehabilitación estructural, cubiertas, naves industriales o urbanización.
+
+Datos del trabajo:
+- Tipo de obra: ${f.tipo}
 - Superficie aproximada: ${f.m2 || "no indicada"} m²
 - Calidad de materiales: ${f.calidad}
-- Estancias afectadas: ${f.estancias || "no indicadas"}
+- Zonas o estancias afectadas: ${f.estancias || "no indicadas"}
 - Detalles adicionales: ${f.detalles || "ninguno"}
 
-Precios de materiales del catálogo propio del reformista (úsalos como referencia cuando encajen): ${catalogo}
+Precios del catálogo propio de la empresa (úsalos cuando encajen, tienen prioridad sobre tu estimación): ${catalogo || "(vacío)"}
 
-Reglas de formato (estilo banco de precios CYPE):
-- Organiza cada partida en su capítulo de obra: Demoliciones, Albañilería, Fontanería, Electricidad, Revestimientos, Carpintería, Pintura, Equipamiento o Gestión de residuos.
-- El concepto es el nombre de la unidad de obra; la descripción es técnica y de una línea (material, formato, colocación, incluye mano de obra y medios auxiliares).
-- Precios unitarios realistas del mercado español actual, coherentes con el banco de precios CYPE para calidad ${String(f.calidad || "").toLowerCase()}.
-- Incluye siempre gestión de residuos si hay demoliciones.
+CAPÍTULOS DISPONIBLES — usa solo los que apliquen. Los números son solo para indicarte el orden de ejecución: NO los incluyas en el nombre del capítulo (escribe "Estructuras", nunca "5. Estructuras").
+1. Actuaciones previas — desmontajes, apeos, apuntalamientos, catas.
+2. Demoliciones
+3. Acondicionamiento del terreno — desbroce, excavación, vaciados, rellenos, drenajes.
+4. Cimentaciones — zapatas, losas, encepados, muros de sótano, recalces.
+5. Estructuras — vigas, viguetas, bovedillas, pilares, forjados, losas, refuerzos metálicos, zunchos, cargaderos, reparación de estructura de hormigón o madera.
+6. Fachadas y particiones — cerramientos, tabiquería, trasdosados.
+7. Cubiertas — tejados, faldones, canalones, impermeabilización de cubierta, lucernarios.
+8. Aislamientos e impermeabilizaciones
+9. Instalaciones — fontanería, saneamiento, electricidad, climatización, ventilación, gas, telecomunicaciones, protección contra incendios, energía solar.
+10. Carpintería, cerrajería y vidrios — puertas, ventanas, barandillas, rejas.
+11. Revestimientos — solados, alicatados, enfoscados, falsos techos, pinturas.
+12. Equipamiento — sanitarios, mobiliario de cocina, electrodomésticos.
+13. Urbanización exterior — pavimentos, cerramientos de parcela, jardinería, redes exteriores.
+14. Maquinaria y medios auxiliares — andamios, grúas, plataformas, contenedores, alquiler de maquinaria y herramienta específica de esta obra.
+15. Gestión de residuos — obligatoria siempre que haya demoliciones o movimiento de tierras.
+16. Seguridad y salud — obligatoria en toda obra: EPIs, protecciones colectivas, señalización.
+17. Control de calidad — ensayos; inclúyelo cuando haya estructura o cimentación.
+
+REGLAS:
+- No dejes fuera ningún trabajo necesario para ejecutar y rematar la obra, aunque no lo mencionen los detalles. Si para sustituir una viga hay que apear antes, incluye el apeo. Si hay estructura, incluye control de calidad. En toda obra, seguridad y salud.
+- El concepto es el nombre de la unidad de obra. La descripción es técnica y de una línea (material, formato, colocación; incluye mano de obra, medios auxiliares y parte proporcional de pequeño material).
+- Unidades según el trabajo: ud, m², m³, ml, kg, t, h, día, pa (partida alzada). m³ para excavaciones, rellenos y hormigones; kg o t para acero; ml para vigas, canalones y zócalos; pa para lo difícil de medir.
+- Precios unitarios realistas del mercado español actual para calidad ${String(f.calidad || "").toLowerCase()}, coherentes con los bancos de precios oficiales. El precio ES la unidad de obra completa (material + mano de obra + medios auxiliares), NO el material suelto.
+- Mediciones coherentes con la superficie indicada. Si no la dan, estima una razonable para el tipo de obra y dilo en la descripción.
+- La herramienta de uso general (radial, taladro, borriquetas) va incluida en el precio de cada partida, no como línea aparte. En "Maquinaria y medios auxiliares" solo va lo que se alquila o es específico de esta obra.
+
 Responde SOLO con JSON válido, sin markdown ni texto adicional, con este formato exacto:
-{"partidas":[{"capitulo":"...","concepto":"...","descripcion":"...","cantidad":1,"unidad":"ud|m²|ml|h|pa","precio":0}]}
-Máximo 14 partidas, ordenadas por capítulo en el orden lógico de ejecución de la obra.`;
+{"partidas":[{"capitulo":"...","concepto":"...","descripcion":"...","cantidad":1,"unidad":"ud|m²|m³|ml|kg|t|h|día|pa","precio":0}]}
+Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Usa las que hagan falta: un baño necesita pocas, una obra nueva muchas.`;
 
   try {
     const r = await fetch(
@@ -70,9 +94,10 @@ Máximo 14 partidas, ordenadas por capítulo en el orden lógico de ejecución d
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          // maxOutputTokens generoso: los modelos Gemini "thinking" consumen parte del
-          // presupuesto de tokens en razonamiento interno antes de escribir el JSON final.
-          generationConfig: { maxOutputTokens: 8192, responseMimeType: "application/json" },
+          // Generoso por dos motivos: los modelos Gemini "thinking" gastan parte del
+          // presupuesto razonando antes de escribir el JSON, y una obra completa puede
+          // llegar a 40 partidas. Si se queda corto, el JSON sale cortado y no se puede leer.
+          generationConfig: { maxOutputTokens: 24576, responseMimeType: "application/json" },
         }),
       }
     );
@@ -88,8 +113,13 @@ Máximo 14 partidas, ordenadas por capítulo en el orden lógico de ejecución d
     const clean = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(clean);
 
+    // Aunque el prompt lo pide, el modelo a veces devuelve "5. Estructuras" con el
+    // número de orden delante. Se quita aquí para que el presupuesto que ve el
+    // cliente no lleve una numeración interna nuestra.
+    const limpiarCapitulo = (c?: string) => (c || "Varios").replace(/^\s*\d+\s*[.)-]\s*/, "").trim() || "Varios";
+
     const lineas = (parsed.partidas || []).map((p: PartidaIA) => ({
-      capitulo: p.capitulo || "Varios",
+      capitulo: limpiarCapitulo(p.capitulo),
       concepto: p.concepto || "",
       descripcion: p.descripcion || "",
       cantidad: Number(p.cantidad) || 1,

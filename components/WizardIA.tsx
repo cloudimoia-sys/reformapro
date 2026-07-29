@@ -5,15 +5,74 @@ import type { LineaIA } from "@/app/(app)/presupuestos/actions";
 
 type Form = { tipo: string; m2: string; calidad: string; estancias: string; detalles: string };
 
-const TIPOS = [
-  "Baño completo",
-  "Cocina completa",
-  "Reforma integral de vivienda",
-  "Pintura y acabados",
-  "Suelos y alicatados",
-  "Local comercial",
-  "Fachada / exterior",
-  "Otra",
+/**
+ * Agrupado por familias para que se vea de un vistazo que la herramienta no es
+ * solo de reformas pequeñas: un constructor tiene que encontrar aquí su trabajo,
+ * sea sustituir una vigueta o levantar una nave.
+ */
+const TIPOS: { grupo: string; opciones: string[] }[] = [
+  {
+    grupo: "Reformas de vivienda",
+    opciones: [
+      "Baño completo",
+      "Cocina completa",
+      "Reforma integral de vivienda",
+      "Pintura y acabados",
+      "Suelos y alicatados",
+      "Cambio de ventanas y carpintería",
+      "Adaptación de accesibilidad",
+    ],
+  },
+  {
+    grupo: "Estructura y cimentación",
+    opciones: [
+      "Sustitución de viguetas o bovedillas",
+      "Refuerzo o reparación de forjado",
+      "Sustitución de vigas o pilares",
+      "Recalce o refuerzo de cimentación",
+      "Apertura de hueco en muro de carga",
+      "Reparación de estructura de madera",
+      "Tratamiento de aluminosis o patologías del hormigón",
+    ],
+  },
+  {
+    grupo: "Obra nueva y ampliación",
+    opciones: [
+      "Vivienda unifamiliar de obra nueva",
+      "Ampliación o levante de planta",
+      "Nave industrial o almacén",
+      "Garaje, trastero o caseta",
+      "Piscina",
+    ],
+  },
+  {
+    grupo: "Envolvente del edificio",
+    opciones: [
+      "Cubierta o tejado",
+      "Impermeabilización",
+      "Fachada y aislamiento (SATE)",
+      "Rehabilitación energética",
+    ],
+  },
+  {
+    grupo: "Instalaciones",
+    opciones: [
+      "Fontanería y saneamiento",
+      "Instalación eléctrica y boletín",
+      "Climatización y ventilación",
+      "Placas solares",
+    ],
+  },
+  {
+    grupo: "Exterior y otros",
+    opciones: [
+      "Local comercial",
+      "Urbanización, pavimentos y muros",
+      "Demolición o derribo",
+      "Movimiento de tierras",
+      "Otra (descríbela en los detalles)",
+    ],
+  },
 ];
 
 export default function WizardIA({
@@ -54,20 +113,25 @@ export default function WizardIA({
         <div className="tapebar" style={{ margin: "-22px -22px 16px" }} />
         <h2 style={{ fontSize: 24 }}>Asistente IA de presupuestos</h2>
         <p className="hint">
-          Responde a estas preguntas básicas y la IA propondrá las partidas por capítulos de obra, con precios de
-          referencia del mercado español. Después podrás editarlo todo antes de generar el documento — contrasta
+          Responde a estas preguntas y la IA propondrá las partidas por capítulos de obra —incluidos estructura,
+          cimentación, seguridad y salud o gestión de residuos cuando el trabajo lo requiera—, con precios de
+          referencia del mercado español. Después podrás editarlo todo antes de generar el documento; contrasta
           siempre los precios con tu zona.
         </p>
         <div className="field">
-          <label className="lbl">¿Qué tipo de reforma es?</label>
+          <label className="lbl">¿Qué tipo de obra es?</label>
           <select className="inp" value={f.tipo} onChange={(e) => set("tipo", e.target.value)}>
-            {TIPOS.map((o) => <option key={o}>{o}</option>)}
+            {TIPOS.map((g) => (
+              <optgroup key={g.grupo} label={g.grupo}>
+                {g.opciones.map((o) => <option key={o}>{o}</option>)}
+              </optgroup>
+            ))}
           </select>
         </div>
         <div className="grid g2">
           <div className="field">
             <label className="lbl">¿Cuántos m² aproximados?</label>
-            <input className="inp" type="number" value={f.m2} onChange={(e) => set("m2", e.target.value)} placeholder="Ej: 8" />
+            <input className="inp" type="number" value={f.m2} onChange={(e) => set("m2", e.target.value)} placeholder="Ej: 8 (o 120 en obra nueva)" />
           </div>
           <div className="field">
             <label className="lbl">¿Qué calidad de materiales?</label>
@@ -80,17 +144,22 @@ export default function WizardIA({
           </div>
         </div>
         <div className="field">
-          <label className="lbl">¿Qué estancias afecta?</label>
-          <input className="inp" value={f.estancias} onChange={(e) => set("estancias", e.target.value)} placeholder="Ej: baño principal y aseo" />
+          <label className="lbl">¿Qué zonas o estancias afecta?</label>
+          <input
+            className="inp"
+            value={f.estancias}
+            onChange={(e) => set("estancias", e.target.value)}
+            placeholder="Ej: baño principal y aseo · forjado de planta primera · cubierta trasera"
+          />
         </div>
         <div className="field">
-          <label className="lbl">Detalles: ¿qué quiere el cliente exactamente?</label>
+          <label className="lbl">Detalles: ¿qué hay que hacer exactamente?</label>
           <textarea
             className="inp"
-            rows={3}
+            rows={4}
             value={f.detalles}
             onChange={(e) => set("detalles", e.target.value)}
-            placeholder="Ej: cambiar bañera por plato de ducha, alicatado nuevo, mampara de cristal, mueble suspendido..."
+            placeholder="Cuanto más concreto, mejor sale. Ej: sustituir 6 viguetas de hormigón afectadas por aluminosis en el forjado del salón, con apeo previo, bovedillas cerámicas nuevas y capa de compresión; se accede por patio interior, sin sitio para grúa."
           />
         </div>
         {error && <p className="error">{error}</p>}
