@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { requireTenant, requireTenantAdmin, type ContextoTenant } from "@/lib/session";
+import { ejecutar, type Resultado } from "@/lib/accion";
 import { siguienteNumero } from "@/lib/counter";
 import { base as calcBase } from "@/lib/presupuesto";
 
@@ -54,32 +55,43 @@ export type LineaIA = {
   precio: number;
 };
 
-export async function crearPresupuestoConIA(lineas: LineaIA[], meta: { tipo: string; m2?: string }) {
-  const { db, empresaId, user } = await requireTenant();
-  const [numero, primerCliente, empresa] = await Promise.all([
-    siguienteNumero(empresaId, "presupuesto"),
-    db.cliente.findFirst({ orderBy: { nombre: "asc" } }),
-    db.empresa.findFirst(),
-  ]);
-  const titulo = `${meta.tipo}${meta.m2 ? ` (${meta.m2} m²)` : ""}`;
-  const p = await db.presupuesto.create({
-    data: {
-      empresaId,
-      numero,
-      clienteId: primerCliente?.id,
-      titulo,
-      fecha: new Date(),
-      iva: empresa?.ivaDefecto ?? 10,
-      estado: "BORRADOR",
-      autor: user.nombre,
-      // empresaId va explícito en las líneas: los `create` anidados NO pasan por el
-      // filtro automático (Prisma no se los enseña a la extensión), así que hay que
-      // ponerlo a mano. Si se olvidara, saltaría un NOT NULL, no una fuga.
-      lineas: { create: lineas.map((l, i) => ({ ...l, orden: i, empresaId })) },
-    },
+/**
+ * Devuelve el error en vez de lanzarlo: Next borra el mensaje de las excepciones
+ * de una acción en producción, y el asistente mostraría un texto genérico que no
+ * dice nada. Al éxito redirige, así que solo retorna cuando algo ha ido mal.
+ */
+export async function crearPresupuestoConIA(
+  lineas: LineaIA[],
+  meta: { tipo: string; m2?: string }
+): Promise<Resultado> {
+  return ejecutar("crearPresupuestoConIA", async () => {
+    const { db, empresaId, user } = await requireTenant();
+    const [numero, primerCliente, empresa] = await Promise.all([
+      siguienteNumero(empresaId, "presupuesto"),
+      db.cliente.findFirst({ orderBy: { nombre: "asc" } }),
+      db.empresa.findFirst(),
+    ]);
+    const titulo = `${meta.tipo}${meta.m2 ? ` (${meta.m2} m²)` : ""}`;
+    const p = await db.presupuesto.create({
+      data: {
+        empresaId,
+        numero,
+        clienteId: primerCliente?.id,
+        titulo,
+        fecha: new Date(),
+        iva: empresa?.ivaDefecto ?? 10,
+        estado: "BORRADOR",
+        autor: user.nombre,
+        // Las líneas NO llevan empresaId: como apuntan al presupuesto por la pareja
+        // (presupuestoId, empresaId), Prisma la hereda del padre y rechaza que se la
+        // pasemos ("Unknown argument empresaId"). La clave foránea compuesta ya
+        // garantiza que la línea queda en la misma empresa que su presupuesto.
+        lineas: { create: lineas.map((l, i) => ({ ...l, orden: i })) },
+      },
+    });
+    revalidatePath("/presupuestos");
+    redirect(`/presupuestos/${p.id}`);
   });
-  revalidatePath("/presupuestos");
-  redirect(`/presupuestos/${p.id}`);
 }
 
 export async function borrarPresupuesto(id: string) {

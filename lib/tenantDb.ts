@@ -131,12 +131,11 @@ export function tenantDb(empresaId: string) {
           }
 
           if (OPS_ALTA.has(operation)) {
-            // OJO: esto cubre el alta de primer nivel. Los `create` anidados
-            // (p. ej. presupuesto.create({ data: { lineas: { create: [...] } } }))
-            // NO pasan por aquí — Prisma no los expone a la extensión. Como
-            // `empresaId` es NOT NULL sin valor por defecto, olvidarlo revienta con
-            // un error claro en vez de guardar mal; aun así, hay que ponerlo a mano
-            // en la llamada.
+            // Esto cubre el alta de primer nivel. Los `create` anidados (p. ej.
+            // presupuesto.create({ data: { lineas: { create: [...] } } })) no pasan
+            // por aquí, pero tampoco hace falta: las tablas hijas apuntan al padre
+            // por la pareja (padreId, empresaId), así que Prisma hereda la empresa
+            // del padre. De hecho, pasarla a mano da "Unknown argument empresaId".
             if (Array.isArray(a.data)) {
               a.data = (a.data as Record<string, unknown>[]).map((d) => ({ ...d, empresaId }));
             } else {
