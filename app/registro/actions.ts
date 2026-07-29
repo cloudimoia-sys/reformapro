@@ -17,8 +17,14 @@ export type RegistroInput = {
 };
 
 const DIAS_PRUEBA = 14;
-const MAX_POR_IP_HORA = 3;
-const MAX_GLOBAL_HORA = 20;
+/**
+ * Altas CONSEGUIDAS por IP y hora. Nadie crea legítimamente cuatro empresas
+ * seguidas, pero equivocarse tecleando el email no debe gastar cupo: por eso
+ * solo se apunta el intento cuando la empresa se ha creado de verdad.
+ */
+const MAX_ALTAS_POR_IP_HORA = 3;
+/** Tope global de altas por hora: freno de mano ante una oleada de registros. */
+const MAX_ALTAS_GLOBAL_HORA = 30;
 
 /** Hash de la IP para poder contar altas sin guardar la IP en claro (RGPD). */
 function hashIp(ip: string) {
@@ -31,9 +37,9 @@ function ipDeLaPeticion() {
   return h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "desconocida";
 }
 
-async function comprobarLimite() {
+/** ¿Esta IP (o la plataforma entera) ha creado ya demasiadas empresas esta hora? */
+async function superaElLimite(ipHash: string) {
   const desde = new Date(Date.now() - 60 * 60 * 1000);
-  const ipHash = hashIp(ipDeLaPeticion());
 
   // El contador vive en la base de datos y no en memoria: en Vercel cada función
   // serverless tiene su propia memoria, así que un contador local no contaría nada.
@@ -42,10 +48,7 @@ async function comprobarLimite() {
     prismaUnsafe.registroIntento.count({ where: { createdAt: { gte: desde } } }),
   ]);
 
-  if (deEstaIp >= MAX_POR_IP_HORA || enTotal >= MAX_GLOBAL_HORA) {
-    throw new Error("Demasiados intentos de registro. Prueba dentro de un rato.");
-  }
-  await prismaUnsafe.registroIntento.create({ data: { ipHash } });
+  return deEstaIp >= MAX_ALTAS_POR_IP_HORA || enTotal >= MAX_ALTAS_GLOBAL_HORA;
 }
 
 export type ResultadoRegistro = { ok: true } | { ok: false; error: string };
@@ -81,10 +84,9 @@ export async function registrarEmpresa(data: RegistroInput): Promise<ResultadoRe
     return { ok: false, error: "La contraseña debe tener al menos 10 caracteres." };
   }
 
-  try {
-    await comprobarLimite();
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+  const ipHash = hashIp(ipDeLaPeticion());
+  if (await superaElLimite(ipHash)) {
+    return { ok: false, error: "Se han creado demasiadas cuentas desde aquí. Prueba dentro de un rato." };
   }
 
   // bcrypt fuera de la transacción: son ~100 ms de CPU pura, y mantener abierta
@@ -115,6 +117,11 @@ export async function registrarEmpresa(data: RegistroInput): Promise<ResultadoRe
     console.error("Error inesperado al registrar empresa:", e);
     return { ok: false, error: "No se pudo crear la cuenta. Inténtalo de nuevo en un momento." };
   }
+
+  // Se apunta AQUI, no antes: solo cuentan las altas conseguidas. Antes se contaba
+  // cualquier intento, así que equivocarse tecleando el email gastaba el cupo y
+  // dejaba a quien se registra bloqueado una hora por un despiste.
+  await prismaUnsafe.registroIntento.create({ data: { ipHash } });
 
   return { ok: true };
 }
