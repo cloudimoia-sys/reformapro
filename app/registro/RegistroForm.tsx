@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { registrarEmpresa, type RegistroInput } from "./actions";
 
 const VACIO: RegistroInput = {
@@ -14,6 +15,7 @@ const VACIO: RegistroInput = {
 };
 
 export default function RegistroForm({ pideCodigo }: { pideCodigo: boolean }) {
+  const router = useRouter();
   const [f, setF] = useState<RegistroInput>(VACIO);
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -23,14 +25,15 @@ export default function RegistroForm({ pideCodigo }: { pideCodigo: boolean }) {
     e.preventDefault();
     setEnviando(true);
     setError("");
-    try {
-      await registrarEmpresa(f);
-    } catch (err: any) {
-      // redirect() de Next lanza una excepción especial para navegar; no es un error.
-      if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
-      setError(err.message || "No se pudo completar el registro.");
-      setEnviando(false);
+    // La acción devuelve el error en vez de lanzarlo: Next borra los mensajes de
+    // las excepciones en producción y quien se registra vería un error genérico.
+    const r = await registrarEmpresa(f);
+    if (r.ok) {
+      router.push("/login?creada=1");
+      return;
     }
+    setError(r.error);
+    setEnviando(false);
   };
 
   return (

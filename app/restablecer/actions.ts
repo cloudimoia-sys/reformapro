@@ -22,20 +22,34 @@ export async function comprobarToken(token: string) {
   return Boolean(await tokenValido(token));
 }
 
-export async function restablecerPassword(token: string, password: string) {
-  if (password.length < 10) throw new Error("La contraseña debe tener al menos 10 caracteres.");
+export type ResultadoRestablecer = { ok: true } | { ok: false; error: string };
+
+/**
+ * Devuelve el error en vez de lanzarlo: Next borra el mensaje de las excepciones
+ * de una acción en producción, y el visitante vería un error genérico en lugar de
+ * "este enlace ya no es válido".
+ */
+export async function restablecerPassword(token: string, password: string): Promise<ResultadoRestablecer> {
+  if (password.length < 10) {
+    return { ok: false, error: "La contraseña debe tener al menos 10 caracteres." };
+  }
 
   const fila = await tokenValido(token);
-  if (!fila) throw new Error("Este enlace ya no es válido. Pide uno nuevo.");
+  if (!fila) return { ok: false, error: "Este enlace ya no es válido. Pide uno nuevo." };
 
   const passwordHash = await bcrypt.hash(password, 10);
 
-  // Cambiar la contraseña y quemar el token van juntos: si algo falla, el enlace
-  // sigue sirviendo y no se queda una contraseña a medio cambiar.
-  await prismaUnsafe.$transaction([
-    prismaUnsafe.usuario.update({ where: { id: fila.usuarioId }, data: { passwordHash } }),
-    prismaUnsafe.passwordResetToken.update({ where: { id: fila.id }, data: { usadoEn: new Date() } }),
-  ]);
+  try {
+    // Cambiar la contraseña y quemar el token van juntos: si algo falla, el enlace
+    // sigue sirviendo y no se queda una contraseña a medio cambiar.
+    await prismaUnsafe.$transaction([
+      prismaUnsafe.usuario.update({ where: { id: fila.usuarioId }, data: { passwordHash } }),
+      prismaUnsafe.passwordResetToken.update({ where: { id: fila.id }, data: { usadoEn: new Date() } }),
+    ]);
+  } catch (e) {
+    console.error("Error al restablecer la contraseña:", e);
+    return { ok: false, error: "No se pudo cambiar la contraseña. Inténtalo de nuevo." };
+  }
 
   return { ok: true };
 }

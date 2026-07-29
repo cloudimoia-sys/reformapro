@@ -20,13 +20,13 @@ export default function RestablecerForm({ token }: { token: string }) {
     }
     setEnviando(true);
     setError("");
-    try {
-      await restablecerPassword(token, password);
+    const r = await restablecerPassword(token, password);
+    if (r.ok) {
       router.push("/login?restablecida=1");
-    } catch (err: any) {
-      setError(err.message || "No se pudo cambiar la contraseña.");
-      setEnviando(false);
+      return;
     }
+    setError(r.error);
+    setEnviando(false);
   };
 
   return (
