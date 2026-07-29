@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -39,7 +40,12 @@ export default function LoginForm() {
           </p>
           {searchParams.get("creada") === "1" && (
             <p className="hint" style={{ color: "var(--ok)", marginTop: -10, marginBottom: 16 }}>
-              Cuenta de administrador creada. Ya puedes acceder.
+              Cuenta creada. Ya puedes acceder.
+            </p>
+          )}
+          {searchParams.get("restablecida") === "1" && (
+            <p className="hint" style={{ color: "var(--ok)", marginTop: -10, marginBottom: 16 }}>
+              Contraseña actualizada. Entra con la nueva.
             </p>
           )}
           <form onSubmit={entrar}>
@@ -69,6 +75,11 @@ export default function LoginForm() {
               {loading ? "Entrando…" : "Entrar"}
             </button>
           </form>
+          <p className="hint" style={{ marginTop: 16, textAlign: "center" }}>
+            <Link href="/recuperar">He olvidado mi contraseña</Link>
+            {" · "}
+            <Link href="/registro">Crear cuenta</Link>
+          </p>
         </div>
       </div>
     </div>
