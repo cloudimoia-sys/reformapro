@@ -23,27 +23,29 @@ async function cargarEditable(db: ContextoTenant["db"], id: string) {
   return p;
 }
 
-export async function crearPresupuestoBlanco() {
-  const { db, empresaId, user } = await requireTenant();
-  const [numero, primerCliente, empresa] = await Promise.all([
-    siguienteNumero(empresaId, "presupuesto"),
-    db.cliente.findFirst({ orderBy: { nombre: "asc" } }),
-    db.empresa.findFirst(),
-  ]);
-  const p = await db.presupuesto.create({
-    data: {
-      empresaId,
-      numero,
-      clienteId: primerCliente?.id,
-      titulo: "Nueva reforma",
-      fecha: new Date(),
-      iva: empresa?.ivaDefecto ?? 10,
-      estado: "BORRADOR",
-      autor: user.nombre,
-    },
+export async function crearPresupuestoBlanco(): Promise<Resultado> {
+  return ejecutar("crearPresupuestoBlanco", async () => {
+    const { db, empresaId, user } = await requireTenant();
+    const [numero, primerCliente, empresa] = await Promise.all([
+      siguienteNumero(empresaId, "presupuesto"),
+      db.cliente.findFirst({ orderBy: { nombre: "asc" } }),
+      db.empresa.findFirst(),
+    ]);
+    const p = await db.presupuesto.create({
+      data: {
+        empresaId,
+        numero,
+        clienteId: primerCliente?.id,
+        titulo: "Nueva obra",
+        fecha: new Date(),
+        iva: empresa?.ivaDefecto ?? 10,
+        estado: "BORRADOR",
+        autor: user.nombre,
+      },
+    });
+    revalidatePath("/presupuestos");
+    redirect(`/presupuestos/${p.id}`);
   });
-  revalidatePath("/presupuestos");
-  redirect(`/presupuestos/${p.id}`);
 }
 
 export type LineaIA = {
@@ -94,16 +96,18 @@ export async function crearPresupuestoConIA(
   });
 }
 
-export async function borrarPresupuesto(id: string) {
-  const { db } = await requireTenantAdmin();
-  // Las facturas apuntan al presupuesto con NO ACTION, así que hay que
-  // desvincularlas antes de borrar (antes lo hacía el SET NULL de la base).
-  await db.$transaction(async (tx) => {
-    await tx.factura.updateMany({ where: { presupuestoId: id }, data: { presupuestoId: null } });
-    const r = await tx.presupuesto.deleteMany({ where: { id } });
-    if (r.count === 0) throw new Error("Presupuesto no encontrado");
+export async function borrarPresupuesto(id: string): Promise<Resultado> {
+  return ejecutar("borrarPresupuesto", async () => {
+    const { db } = await requireTenantAdmin();
+    // Las facturas apuntan al presupuesto con NO ACTION, así que hay que
+    // desvincularlas antes de borrar (antes lo hacía el SET NULL de la base).
+    await db.$transaction(async (tx) => {
+      await tx.factura.updateMany({ where: { presupuestoId: id }, data: { presupuestoId: null } });
+      const r = await tx.presupuesto.deleteMany({ where: { id } });
+      if (r.count === 0) throw new Error("Presupuesto no encontrado");
+    });
+    revalidatePath("/presupuestos");
   });
-  revalidatePath("/presupuestos");
 }
 
 export type PresupuestoPatch = Partial<{
@@ -114,41 +118,45 @@ export type PresupuestoPatch = Partial<{
   notas: string;
 }>;
 
-export async function actualizarPresupuesto(id: string, patch: PresupuestoPatch) {
-  const { db } = await requireTenant();
-  const { notas, ...resto } = patch;
-  const huboOtroCambio = Object.keys(resto).length > 0;
-  if (huboOtroCambio) await cargarEditable(db, id);
+export async function actualizarPresupuesto(id: string, patch: PresupuestoPatch): Promise<Resultado> {
+  return ejecutar("actualizarPresupuesto", async () => {
+    const { db } = await requireTenant();
+    const { notas, ...resto } = patch;
+    const huboOtroCambio = Object.keys(resto).length > 0;
+    if (huboOtroCambio) await cargarEditable(db, id);
 
-  // El clienteId viene del navegador: comprobamos que es un cliente nuestro antes
-  // de asignarlo. La clave foránea compuesta lo rechazaría igualmente, pero así el
-  // mensaje es claro en vez de un error de base de datos.
-  if (resto.clienteId) {
-    const cliente = await db.cliente.findFirst({ where: { id: resto.clienteId }, select: { id: true } });
-    if (!cliente) throw new Error("Cliente no encontrado");
-  }
+    // El clienteId viene del navegador: comprobamos que es un cliente nuestro antes
+    // de asignarlo. La clave foránea compuesta lo rechazaría igualmente, pero así el
+    // mensaje es claro en vez de un error de base de datos.
+    if (resto.clienteId) {
+      const cliente = await db.cliente.findFirst({ where: { id: resto.clienteId }, select: { id: true } });
+      if (!cliente) throw new Error("Cliente no encontrado");
+    }
 
-  const r = await db.presupuesto.updateMany({
-    where: { id },
-    data: {
-      ...resto,
-      ...(resto.fecha ? { fecha: new Date(resto.fecha) } : {}),
-      ...(notas !== undefined ? { notas } : {}),
-    },
+    const r = await db.presupuesto.updateMany({
+      where: { id },
+      data: {
+        ...resto,
+        ...(resto.fecha ? { fecha: new Date(resto.fecha) } : {}),
+        ...(notas !== undefined ? { notas } : {}),
+      },
+    });
+    if (r.count === 0) throw new Error("Presupuesto no encontrado");
+    revalidatePath(`/presupuestos/${id}`);
   });
-  if (r.count === 0) throw new Error("Presupuesto no encontrado");
-  revalidatePath(`/presupuestos/${id}`);
 }
 
-export async function marcarEnviado(id: string) {
-  const { db } = await requireTenant();
-  const r = await db.presupuesto.updateMany({
-    where: { id, estado: "BORRADOR" },
-    data: { estado: "ENVIADO" },
+export async function marcarEnviado(id: string): Promise<Resultado> {
+  return ejecutar("marcarEnviado", async () => {
+    const { db } = await requireTenant();
+    const r = await db.presupuesto.updateMany({
+      where: { id, estado: "BORRADOR" },
+      data: { estado: "ENVIADO" },
+    });
+    // count 0 puede significar "no es tuyo" o "ya no era borrador": ninguno es un
+    // error para el usuario, que solo está enviando el presupuesto por email.
+    if (r.count > 0) revalidatePath(`/presupuestos/${id}`);
   });
-  // count 0 puede significar "no es tuyo" o "ya no era borrador": ninguno es un
-  // error para el usuario, que solo está enviando el presupuesto por email.
-  if (r.count > 0) revalidatePath(`/presupuestos/${id}`);
 }
 
 export type LineaInput = {
@@ -165,112 +173,124 @@ function clampDescuento(d: number) {
   return Math.min(100, Math.max(0, d));
 }
 
-export async function agregarLinea(presupuestoId: string, data: LineaInput) {
-  const { db, empresaId } = await requireTenant();
-  await cargarEditable(db, presupuestoId);
-  const count = await db.lineaPresupuesto.count({ where: { presupuestoId } });
-  await db.lineaPresupuesto.create({
-    data: { empresaId, presupuestoId, ...data, descuento: clampDescuento(data.descuento), orden: count },
+export async function agregarLinea(presupuestoId: string, data: LineaInput): Promise<Resultado> {
+  return ejecutar("agregarLinea", async () => {
+    const { db, empresaId } = await requireTenant();
+    await cargarEditable(db, presupuestoId);
+    const count = await db.lineaPresupuesto.count({ where: { presupuestoId } });
+    await db.lineaPresupuesto.create({
+      data: { empresaId, presupuestoId, ...data, descuento: clampDescuento(data.descuento), orden: count },
+    });
+    revalidatePath(`/presupuestos/${presupuestoId}`);
   });
-  revalidatePath(`/presupuestos/${presupuestoId}`);
 }
 
-export async function agregarMaterialDelCatalogo(presupuestoId: string, productoId: string) {
-  const { db, empresaId } = await requireTenant();
-  await cargarEditable(db, presupuestoId);
+export async function agregarMaterialDelCatalogo(presupuestoId: string, productoId: string): Promise<Resultado> {
+  return ejecutar("agregarMaterialDelCatalogo", async () => {
+    const { db, empresaId } = await requireTenant();
+    await cargarEditable(db, presupuestoId);
 
-  // Los DOS ids llegan del navegador. Este caso no lo cubre la clave foránea
-  // compuesta, porque la línea copia el nombre y el precio en vez de apuntar al
-  // producto: sin esta comprobación, una empresa podría leer los precios
-  // negociados de otra pasando el id de su material.
-  const [producto, count] = await Promise.all([
-    db.producto.findFirst({ where: { id: productoId }, include: { proveedor: true } }),
-    db.lineaPresupuesto.count({ where: { presupuestoId } }),
-  ]);
-  if (!producto) throw new Error("Material no encontrado");
+    // Los DOS ids llegan del navegador. Este caso no lo cubre la clave foránea
+    // compuesta, porque la línea copia el nombre y el precio en vez de apuntar al
+    // producto: sin esta comprobación, una empresa podría leer los precios
+    // negociados de otra pasando el id de su material.
+    const [producto, count] = await Promise.all([
+      db.producto.findFirst({ where: { id: productoId }, include: { proveedor: true } }),
+      db.lineaPresupuesto.count({ where: { presupuestoId } }),
+    ]);
+    if (!producto) throw new Error("Material no encontrado");
 
-  await db.lineaPresupuesto.create({
-    data: {
-      empresaId,
-      presupuestoId,
-      capitulo: "Materiales",
-      concepto: producto.nombre,
-      descripcion: `Material · ${producto.proveedor.nombre}`,
-      cantidad: 1,
-      unidad: producto.unidad,
-      precio: producto.precio,
-      orden: count,
-    },
-  });
-  revalidatePath(`/presupuestos/${presupuestoId}`);
-}
-
-export async function actualizarLinea(lineaId: string, patch: Partial<LineaInput>) {
-  const { db } = await requireTenant();
-  const linea = await db.lineaPresupuesto.findFirst({ where: { id: lineaId } });
-  if (!linea) throw new Error("Línea no encontrada");
-  await cargarEditable(db, linea.presupuestoId);
-
-  await db.lineaPresupuesto.updateMany({
-    where: { id: lineaId },
-    data: { ...patch, ...(patch.descuento !== undefined ? { descuento: clampDescuento(patch.descuento) } : {}) },
-  });
-  revalidatePath(`/presupuestos/${linea.presupuestoId}`);
-}
-
-export async function borrarLinea(lineaId: string) {
-  const { db } = await requireTenant();
-  const linea = await db.lineaPresupuesto.findFirst({ where: { id: lineaId } });
-  if (!linea) throw new Error("Línea no encontrada");
-  await cargarEditable(db, linea.presupuestoId);
-
-  await db.lineaPresupuesto.deleteMany({ where: { id: lineaId } });
-  revalidatePath(`/presupuestos/${linea.presupuestoId}`);
-}
-
-export async function guardarFirma(presupuestoId: string, dataUrl: string) {
-  const { db } = await requireTenant();
-  await cargarEditable(db, presupuestoId);
-  const ip = headers().get("x-forwarded-for")?.split(",")[0]?.trim() || headers().get("x-real-ip") || "";
-  await db.presupuesto.updateMany({
-    where: { id: presupuestoId },
-    data: { firma: dataUrl, fechaFirma: new Date(), firmaIp: ip, estado: "APROBADO" },
-  });
-  revalidatePath(`/presupuestos/${presupuestoId}`);
-}
-
-export async function crearFacturaDesdePresupuesto(presupuestoId: string) {
-  const { db, empresaId } = await requireTenantAdmin();
-  const p = await db.presupuesto.findFirst({
-    where: { id: presupuestoId },
-    include: { lineas: true },
-  });
-  if (!p) throw new Error("Presupuesto no encontrado");
-  if (p.estado !== "APROBADO") throw new Error("Solo se puede facturar un presupuesto Aprobado.");
-
-  const base = calcBase(p);
-
-  // El número se reserva DENTRO de la transacción: si algo falla, el contador se
-  // revierte y no queda un hueco en la numeración de facturas (lo exige Hacienda).
-  await db.$transaction(async (tx) => {
-    const numero = await siguienteNumero(empresaId, "factura", tx);
-    await tx.factura.create({
+    await db.lineaPresupuesto.create({
       data: {
         empresaId,
-        numero,
-        presupuestoId: p.id,
-        clienteId: p.clienteId,
-        fecha: new Date(),
-        base,
-        iva: p.iva,
-        total: base * (1 + p.iva / 100),
-        estado: "PENDIENTE",
+        presupuestoId,
+        capitulo: "Materiales",
+        concepto: producto.nombre,
+        descripcion: `Material · ${producto.proveedor.nombre}`,
+        cantidad: 1,
+        unidad: producto.unidad,
+        precio: producto.precio,
+        orden: count,
       },
     });
-    await tx.presupuesto.updateMany({ where: { id: p.id }, data: { estado: "FACTURADO" } });
+    revalidatePath(`/presupuestos/${presupuestoId}`);
   });
+}
 
-  revalidatePath(`/presupuestos/${presupuestoId}`);
-  revalidatePath("/facturas");
-  redirect("/facturas");
+export async function actualizarLinea(lineaId: string, patch: Partial<LineaInput>): Promise<Resultado> {
+  return ejecutar("actualizarLinea", async () => {
+    const { db } = await requireTenant();
+    const linea = await db.lineaPresupuesto.findFirst({ where: { id: lineaId } });
+    if (!linea) throw new Error("Línea no encontrada");
+    await cargarEditable(db, linea.presupuestoId);
+
+    await db.lineaPresupuesto.updateMany({
+      where: { id: lineaId },
+      data: { ...patch, ...(patch.descuento !== undefined ? { descuento: clampDescuento(patch.descuento) } : {}) },
+    });
+    revalidatePath(`/presupuestos/${linea.presupuestoId}`);
+  });
+}
+
+export async function borrarLinea(lineaId: string): Promise<Resultado> {
+  return ejecutar("borrarLinea", async () => {
+    const { db } = await requireTenant();
+    const linea = await db.lineaPresupuesto.findFirst({ where: { id: lineaId } });
+    if (!linea) throw new Error("Línea no encontrada");
+    await cargarEditable(db, linea.presupuestoId);
+
+    await db.lineaPresupuesto.deleteMany({ where: { id: lineaId } });
+    revalidatePath(`/presupuestos/${linea.presupuestoId}`);
+  });
+}
+
+export async function guardarFirma(presupuestoId: string, dataUrl: string): Promise<Resultado> {
+  return ejecutar("guardarFirma", async () => {
+    const { db } = await requireTenant();
+    await cargarEditable(db, presupuestoId);
+    const ip = headers().get("x-forwarded-for")?.split(",")[0]?.trim() || headers().get("x-real-ip") || "";
+    await db.presupuesto.updateMany({
+      where: { id: presupuestoId },
+      data: { firma: dataUrl, fechaFirma: new Date(), firmaIp: ip, estado: "APROBADO" },
+    });
+    revalidatePath(`/presupuestos/${presupuestoId}`);
+  });
+}
+
+export async function crearFacturaDesdePresupuesto(presupuestoId: string): Promise<Resultado> {
+  return ejecutar("crearFacturaDesdePresupuesto", async () => {
+    const { db, empresaId } = await requireTenantAdmin();
+    const p = await db.presupuesto.findFirst({
+      where: { id: presupuestoId },
+      include: { lineas: true },
+    });
+    if (!p) throw new Error("Presupuesto no encontrado");
+    if (p.estado !== "APROBADO") throw new Error("Solo se puede facturar un presupuesto Aprobado.");
+
+    const base = calcBase(p);
+
+    // El número se reserva DENTRO de la transacción: si algo falla, el contador se
+    // revierte y no queda un hueco en la numeración de facturas (lo exige Hacienda).
+    await db.$transaction(async (tx) => {
+      const numero = await siguienteNumero(empresaId, "factura", tx);
+      await tx.factura.create({
+        data: {
+          empresaId,
+          numero,
+          presupuestoId: p.id,
+          clienteId: p.clienteId,
+          fecha: new Date(),
+          base,
+          iva: p.iva,
+          total: base * (1 + p.iva / 100),
+          estado: "PENDIENTE",
+        },
+      });
+      await tx.presupuesto.updateMany({ where: { id: p.id }, data: { estado: "FACTURADO" } });
+    });
+
+    revalidatePath(`/presupuestos/${presupuestoId}`);
+    revalidatePath("/facturas");
+    redirect("/facturas");
+  });
 }

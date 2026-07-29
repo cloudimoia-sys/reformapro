@@ -72,9 +72,24 @@ export default function PresupuestoEditor({
   const base = p.lineas.reduce((s, l) => s + importeLinea(l), 0);
   const clienteActual = clientes.find((c) => c.id === p.clienteId) || null;
 
+  /**
+   * Las acciones devuelven el error en vez de lanzarlo (Next borra el mensaje de
+   * las excepciones en producción). Se muestra arriba del editor y, si el cambio
+   * no llegó a guardarse, se recargan los datos del servidor para que lo que ves
+   * en pantalla no se quede desincronizado con lo que hay en la base.
+   */
+  const [error, setError] = useState("");
+
+  const avisar = (r: { ok: boolean; error?: string }) => {
+    if (r.ok) return true;
+    setError(r.error || "No se pudo guardar el cambio.");
+    router.refresh();
+    return false;
+  };
+
   const commit = async (patch: Partial<Pick<PresupuestoData, "titulo" | "clienteId" | "fecha" | "iva" | "notas">>) => {
     setP((prev) => ({ ...prev, ...patch }));
-    await actualizarPresupuesto(p.id, patch);
+    avisar(await actualizarPresupuesto(p.id, patch));
   };
 
   const setLineaLocal = (id: string, patch: Partial<Linea>) => {
@@ -82,27 +97,32 @@ export default function PresupuestoEditor({
   };
 
   const commitLinea = async (id: string, patch: Partial<Linea>) => {
-    await actualizarLinea(id, patch);
+    avisar(await actualizarLinea(id, patch));
   };
 
   const anadirPartida = async () => {
-    await agregarLinea(p.id, { capitulo: "", concepto: "", descripcion: "", cantidad: 1, unidad: "ud", precio: 0, descuento: 0 });
+    const r = await agregarLinea(p.id, { capitulo: "", concepto: "", descripcion: "", cantidad: 1, unidad: "ud", precio: 0, descuento: 0 });
+    if (!avisar(r)) return;
     router.refresh();
   };
 
   const anadirMaterial = async (productoId: string) => {
     if (!productoId) return;
-    await agregarMaterialDelCatalogo(p.id, productoId);
+    const r = await agregarMaterialDelCatalogo(p.id, productoId);
+    if (!avisar(r)) return;
     router.refresh();
   };
 
   const quitarLinea = async (id: string) => {
     setP((prev) => ({ ...prev, lineas: prev.lineas.filter((l) => l.id !== id) }));
-    await borrarLinea(id);
+    const r = await borrarLinea(id);
+    if (!avisar(r)) return;
     router.refresh();
   };
 
   const enviarEmail = async () => {
+    // A propósito sin comprobar el resultado: marcar como "Enviado" es un extra, y
+    // si falla no debe impedir que se abra el correo, que es lo que el usuario pidió.
     await marcarEnviado(p.id);
     if (p.estado === "BORRADOR") setP((prev) => ({ ...prev, estado: "ENVIADO" }));
     const cuerpo = `Estimado/a ${clienteActual ? clienteActual.nombre : "cliente"}:%0D%0A%0D%0ALe adjuntamos el presupuesto ${p.numero} - ${p.titulo}.%0D%0ATotal: ${eur(base * (1 + p.iva / 100))} (IVA incluido).%0D%0A%0D%0APuede aprobarlo firmando en nuestra aplicación o respondiendo a este correo.%0D%0A%0D%0AUn saludo,%0D%0A${empresa.nombre}`;
@@ -133,9 +153,27 @@ export default function PresupuestoEditor({
         <button className="btn sm" onClick={enviarEmail}>Enviar por email</button>
         {!p.firma && <button className="btn sm amber" onClick={() => setFirmando(true)}>Firma del cliente</button>}
         {p.estado === "APROBADO" && isAdmin && (
-          <button className="btn sm" onClick={() => crearFacturaDesdePresupuesto(p.id)}>Crear factura</button>
+          <button
+            className="btn sm"
+            onClick={async () => {
+              // Al ir bien redirige a /facturas; solo vuelve si algo ha fallado.
+              const r = await crearFacturaDesdePresupuesto(p.id);
+              if (!r.ok) setError(r.error);
+            }}
+          >
+            Crear factura
+          </button>
         )}
       </div>
+
+      {error && (
+        <div className="card" style={{ borderColor: "var(--red)", background: "#FDF3F2", marginBottom: 12 }}>
+          <div className="row">
+            <p className="error" style={{ margin: 0, flex: 1 }}>{error}</p>
+            <button className="btn ghost sm" onClick={() => setError("")}>Cerrar</button>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="grid g2">
@@ -317,8 +355,9 @@ export default function PresupuestoEditor({
             <SignaturePad
               onCancel={() => setFirmando(false)}
               onSave={async (dataUrl) => {
-                await guardarFirma(p.id, dataUrl);
+                const r = await guardarFirma(p.id, dataUrl);
                 setFirmando(false);
+                if (!r.ok) return setError(r.error);
                 router.refresh();
               }}
             />

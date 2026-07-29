@@ -52,6 +52,7 @@ export default function EmpresaClient({
   const [logo, setLogo] = useState(logoInicial);
   const [subiendoLogo, setSubiendoLogo] = useState(false);
   const [errorLogo, setErrorLogo] = useState("");
+  const [errorDatos, setErrorDatos] = useState("");
 
   useEffect(() => {
     setData(empresa);
@@ -61,12 +62,16 @@ export default function EmpresaClient({
     setLogo(logoInicial);
   }, [logoInicial]);
 
+  // Las acciones devuelven el error en vez de lanzarlo: Next borra el mensaje de
+  // las excepciones en producción y no se vería nada útil.
   const guardar = async (patch: Partial<EmpresaInput>) => {
     const next = { ...data, ...patch };
     setData(next);
     setGuardando(true);
-    await actualizarEmpresa(next);
+    const r = await actualizarEmpresa(next);
     setGuardando(false);
+    if (!r.ok) return setErrorDatos(r.error);
+    setErrorDatos("");
     router.refresh();
   };
 
@@ -78,19 +83,23 @@ export default function EmpresaClient({
       return;
     }
     setSubiendoLogo(true);
+    let dataUrl: string;
     try {
-      const dataUrl = await redimensionarImagen(file);
-      await actualizarLogoEmpresa(dataUrl);
-      setLogo(dataUrl);
-      router.refresh();
+      dataUrl = await redimensionarImagen(file);
     } catch (e: any) {
-      setErrorLogo(e.message || "No se pudo subir el logo.");
+      setSubiendoLogo(false);
+      return setErrorLogo(e.message || "No se pudo procesar la imagen.");
     }
+    const r = await actualizarLogoEmpresa(dataUrl);
     setSubiendoLogo(false);
+    if (!r.ok) return setErrorLogo(r.error);
+    setLogo(dataUrl);
+    router.refresh();
   };
 
   const quitarLogo = async () => {
-    await actualizarLogoEmpresa(null);
+    const r = await actualizarLogoEmpresa(null);
+    if (!r.ok) return setErrorLogo(r.error);
     setLogo(null);
     router.refresh();
   };
@@ -138,6 +147,7 @@ export default function EmpresaClient({
         {errorLogo && <p className="error">{errorLogo}</p>}
       </div>
 
+      {errorDatos && <p className="error">{errorDatos}</p>}
       <p className="hint">{guardando ? "Guardando…" : "Estos datos aparecen en la cabecera de presupuestos y facturas."}</p>
     </div>
   );

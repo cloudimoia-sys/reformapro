@@ -12,8 +12,11 @@ type Factura = FacturaDoc & { id: string; estado: string; cliente: ClienteDoc };
 export default function FacturasClient({ facturas, empresa }: { facturas: Factura[]; empresa: Empresa }) {
   const router = useRouter();
 
+  // La acción devuelve el error en vez de lanzarlo: Next borra el mensaje de las
+  // excepciones en producción y el usuario no vería por qué no se ha marcado.
   const marcarPagada = async (id: string) => {
-    await marcarFacturaPagada(id);
+    const r = await marcarFacturaPagada(id);
+    if (!r.ok) return window.alert(r.error);
     router.refresh();
   };
 

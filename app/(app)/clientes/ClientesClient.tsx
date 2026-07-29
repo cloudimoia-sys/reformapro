@@ -31,20 +31,19 @@ export default function ClientesClient({ clientes, isAdmin }: { clientes: Client
     if (!modal) return;
     setGuardando(true);
     setError("");
-    try {
-      if (modal.id) await actualizarCliente(modal.id, modal.data);
-      else await crearCliente(modal.data);
-      cerrar();
-      router.refresh();
-    } catch (e: any) {
-      setError(e.message || "No se pudo guardar el cliente.");
-    }
+    // Las acciones devuelven el error en vez de lanzarlo: Next borra el mensaje de
+    // las excepciones en producción y aquí solo se vería un texto genérico.
+    const r = modal.id ? await actualizarCliente(modal.id, modal.data) : await crearCliente(modal.data);
     setGuardando(false);
+    if (!r.ok) return setError(r.error);
+    cerrar();
+    router.refresh();
   };
 
   const borrar = async (id: string) => {
     if (!window.confirm("¿Eliminar este cliente? Esta acción no se puede deshacer.")) return;
-    await borrarCliente(id);
+    const r = await borrarCliente(id);
+    if (!r.ok) return window.alert(r.error);
     router.refresh();
   };
 

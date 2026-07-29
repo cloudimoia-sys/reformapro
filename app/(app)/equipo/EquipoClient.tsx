@@ -18,29 +18,25 @@ export default function EquipoClient({ usuarios, miId }: { usuarios: Usuario[]; 
   const abrirEditar = (u: Usuario) => setModal({ id: u.id, data: { nombre: u.nombre, email: u.email, rol: u.rol, password: "" } });
   const cerrar = () => { setModal(null); setError(""); };
 
+  // Las acciones devuelven el error en vez de lanzarlo: Next borra el mensaje de
+  // las excepciones en producción, y aquí importa mucho verlo (p. ej. "ese email
+  // ya está registrado en ReformaPro").
   const guardar = async () => {
     if (!modal) return;
     setGuardando(true);
     setError("");
-    try {
-      if (modal.id) await actualizarUsuario(modal.id, modal.data);
-      else await crearUsuario(modal.data);
-      cerrar();
-      router.refresh();
-    } catch (e: any) {
-      setError(e.message || "No se pudo guardar el usuario.");
-    }
+    const r = modal.id ? await actualizarUsuario(modal.id, modal.data) : await crearUsuario(modal.data);
     setGuardando(false);
+    if (!r.ok) return setError(r.error);
+    cerrar();
+    router.refresh();
   };
 
   const borrar = async (id: string) => {
     if (!window.confirm("¿Eliminar este usuario?")) return;
-    try {
-      await borrarUsuario(id);
-      router.refresh();
-    } catch (e: any) {
-      window.alert(e.message || "No se pudo borrar.");
-    }
+    const r = await borrarUsuario(id);
+    if (!r.ok) return window.alert(r.error);
+    router.refresh();
   };
 
   return (

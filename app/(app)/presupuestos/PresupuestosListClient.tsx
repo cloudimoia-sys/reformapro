@@ -24,7 +24,10 @@ export default function PresupuestosListClient({ presupuestos, isAdmin }: { pres
 
   const nuevoEnBlanco = async () => {
     setCreando(true);
-    await crearPresupuestoBlanco();
+    // Al ir bien redirige, así que solo vuelve de aquí cuando algo ha fallado.
+    const r = await crearPresupuestoBlanco();
+    setCreando(false);
+    if (!r.ok) window.alert(r.error);
   };
 
   // Sin cerrar el asistente aquí: si la creación falla, el propio asistente
@@ -37,7 +40,8 @@ export default function PresupuestosListClient({ presupuestos, isAdmin }: { pres
   const borrar = async (id: string, numero: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm(`¿Eliminar el presupuesto ${numero}? Esta acción no se puede deshacer.`)) return;
-    await borrarPresupuesto(id);
+    const r = await borrarPresupuesto(id);
+    if (!r.ok) return window.alert(r.error);
     router.refresh();
   };
 

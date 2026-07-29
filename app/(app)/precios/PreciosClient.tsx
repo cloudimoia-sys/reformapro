@@ -43,19 +43,19 @@ export default function PreciosClient({
   const abrirEditarProveedor = (pr: Proveedor) => setModalProv({ id: pr.id, data: { nombre: pr.nombre, web: pr.web || "" } });
   const cerrarProveedor = () => { setModalProv(null); setError(""); };
 
+  // Las acciones devuelven el error en vez de lanzarlo: Next borra el mensaje de
+  // las excepciones en producción y aquí solo se vería un texto genérico.
   const guardarProveedor = async () => {
     if (!modalProv) return;
     setGuardando(true);
     setError("");
-    try {
-      if (modalProv.id) await actualizarProveedor(modalProv.id, modalProv.data);
-      else await crearProveedor(modalProv.data);
-      cerrarProveedor();
-      router.refresh();
-    } catch (e: any) {
-      setError(e.message || "No se pudo guardar el proveedor.");
-    }
+    const r = modalProv.id
+      ? await actualizarProveedor(modalProv.id, modalProv.data)
+      : await crearProveedor(modalProv.data);
     setGuardando(false);
+    if (!r.ok) return setError(r.error);
+    cerrarProveedor();
+    router.refresh();
   };
 
   const abrirNuevo = () =>
@@ -68,33 +68,30 @@ export default function PreciosClient({
     if (!modal) return;
     setGuardando(true);
     setError("");
-    try {
-      if (modal.id) await actualizarProducto(modal.id, modal.data);
-      else await crearProducto(modal.data);
-      cerrar();
-      router.refresh();
-    } catch (e: any) {
-      setError(e.message || "No se pudo guardar el material.");
-    }
+    const r = modal.id ? await actualizarProducto(modal.id, modal.data) : await crearProducto(modal.data);
     setGuardando(false);
+    if (!r.ok) return setError(r.error);
+    cerrar();
+    router.refresh();
   };
 
   const borrar = async (id: string) => {
     if (!window.confirm("¿Eliminar este material?")) return;
-    await borrarProducto(id);
+    const r = await borrarProducto(id);
+    if (!r.ok) return window.alert(r.error);
     router.refresh();
   };
 
   const comprobarPrecio = async (id: string) => {
     setComprobando(id);
     setErroresComprobacion((prev) => ({ ...prev, [id]: "" }));
-    try {
-      await comprobarPrecioProducto(id);
-      router.refresh();
-    } catch (e: any) {
-      setErroresComprobacion((prev) => ({ ...prev, [id]: e.message || "No se pudo comprobar el precio." }));
-    }
+    const r = await comprobarPrecioProducto(id);
     setComprobando(null);
+    if (!r.ok) {
+      setErroresComprobacion((prev) => ({ ...prev, [id]: r.error }));
+      return;
+    }
+    router.refresh();
   };
 
   const nombreProveedor = (id: string) => proveedores.find((p) => p.id === id)?.nombre || "—";
