@@ -93,36 +93,91 @@ Responde SOLO con JSON válido, sin markdown ni texto adicional, con este format
 {"partidas":[{"capitulo":"...","concepto":"...","descripcion":"...","cantidad":1,"unidad":"ud|m²|m³|ml|kg|t|h|día|pa","precio":0}]}
 Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Usa las que hagan falta: un baño necesita pocas, una obra nueva muchas.`;
 
+  const cuerpo = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      // Generoso: los modelos Gemini "thinking" gastan parte del presupuesto
+      // razonando antes de escribir el JSON, y una obra completa llega a 40
+      // partidas. Si se queda corto, el JSON sale cortado y no se puede leer.
+      maxOutputTokens: 24576,
+      responseMimeType: "application/json",
+      // Baja el razonamiento interno: reduce la espera de ~46 s a ~18 s sin
+      // perder calidad (mismos capítulos y partidas en las pruebas), y deja
+      // margen de sobra frente al límite de 60 s de la función.
+      thinkingConfig: { thinkingLevel: "low" },
+    },
+  });
+
+  /** Presupuesto total de la petición: la función de Vercel muere a los 60 s. */
+  const LIMITE_TOTAL_MS = 52000;
+  /** Por debajo de esto no merece la pena reintentar: no daría tiempo a terminar. */
+  const MINIMO_PARA_REINTENTAR_MS = 20000;
+
+  /**
+   * Llama a Gemini reintentando los fallos pasajeros, sin pasarse del reloj.
+   *
+   * La capa gratuita satura a ratos (429) y Google devuelve 500/503 de vez en
+   * cuando; también se ralentiza mucho bajo carga. Sin reintento, ese tropiezo
+   * momentáneo se le presenta al usuario como "no se pudo generar", justo cuando
+   * puede estar enseñándoselo a un cliente.
+   *
+   * Cada intento solo dispone del tiempo que quede del presupuesto total, así que
+   * reintentar nunca provoca que Vercel corte la función a medias.
+   */
+  async function llamarAGemini(): Promise<Response> {
+    const empezoEn = Date.now();
+    let ultima: Response | null = null;
+
+    for (let intento = 1; ; intento++) {
+      const restante = LIMITE_TOTAL_MS - (Date.now() - empezoEn);
+      if (restante <= 0) break;
+
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: cuerpo,
+          signal: AbortSignal.timeout(restante),
+        }
+      );
+      if (r.ok) return r;
+      ultima = r;
+
+      const esPasajero = r.status === 429 || r.status >= 500;
+      const quedaTiempo = LIMITE_TOTAL_MS - (Date.now() - empezoEn) > MINIMO_PARA_REINTENTAR_MS;
+      if (!esPasajero || !quedaTiempo) return r;
+
+      console.warn(`Gemini respondió ${r.status}; reintento ${intento}`);
+      await new Promise((res) => setTimeout(res, 1500));
+    }
+    return ultima!;
+  }
+
   try {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            // Generoso: los modelos Gemini "thinking" gastan parte del presupuesto
-            // razonando antes de escribir el JSON, y una obra completa llega a 40
-            // partidas. Si se queda corto, el JSON sale cortado y no se puede leer.
-            maxOutputTokens: 24576,
-            responseMimeType: "application/json",
-            // Baja el razonamiento interno: reduce la espera de ~46 s a ~18 s sin
-            // perder calidad (mismos capítulos y partidas en las pruebas), y deja
-            // margen de sobra frente al límite de 60 s de la función.
-            thinkingConfig: { thinkingLevel: "low" },
-          },
-        }),
-        // Corta antes de que lo haga Vercel (60 s): así controlamos el fallo y
-        // damos un motivo claro en vez de que la petición muera sin explicación.
-        signal: AbortSignal.timeout(50000),
-      }
-    );
+    const r = await llamarAGemini();
 
     if (!r.ok) {
       const detalle = await r.text();
       console.error("Error de Gemini:", r.status, detalle);
-      return NextResponse.json({ error: "El proveedor de IA no respondió correctamente." }, { status: 502 });
+
+      // Mensajes distintos porque lo que puede hacer el usuario es distinto en
+      // cada caso: esperar, avisarte a ti, o revisar la cuenta de Google.
+      const porEstado: Record<number, string> = {
+        429: "El servicio de IA está saturado o has agotado la cuota diaria gratuita. Espera un minuto y vuelve a intentarlo.",
+        400: "La IA rechazó la petición. Prueba a acortar los detalles de la obra.",
+        403: "La clave de la IA no es válida o no tiene permiso. Revisa GEMINI_API_KEY.",
+      };
+      return NextResponse.json(
+        {
+          error:
+            porEstado[r.status] ||
+            (r.status >= 500
+              ? "El servicio de IA está caído ahora mismo. Inténtalo en unos minutos."
+              : "El proveedor de IA no respondió correctamente."),
+        },
+        { status: 502 }
+      );
     }
 
     const data = await r.json();
