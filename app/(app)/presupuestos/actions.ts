@@ -3,15 +3,19 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireUser } from "@/lib/session";
+import { requireTenant, requireTenantAdmin, type ContextoTenant } from "@/lib/session";
 import { siguienteNumero } from "@/lib/counter";
 import { base as calcBase } from "@/lib/presupuesto";
 
 const BLOQUEADO_ESTADOS = ["APROBADO", "FACTURADO"];
 
-async function assertNoBloqueado(id: string) {
-  const p = await prisma.presupuesto.findUniqueOrThrow({ where: { id } });
+/**
+ * Carga el presupuesto comprobando de paso que es de esta empresa (el `db` ya
+ * filtra) y que se puede editar. Devuelve la fila para no volver a consultarla.
+ */
+async function cargarEditable(db: ContextoTenant["db"], id: string) {
+  const p = await db.presupuesto.findFirst({ where: { id } });
+  if (!p) throw new Error("Presupuesto no encontrado");
   if (BLOQUEADO_ESTADOS.includes(p.estado)) {
     throw new Error("Este presupuesto ya está aprobado/facturado y no se puede editar.");
   }
@@ -19,21 +23,22 @@ async function assertNoBloqueado(id: string) {
 }
 
 export async function crearPresupuestoBlanco() {
-  const user = await requireUser();
+  const { db, empresaId, user } = await requireTenant();
   const [numero, primerCliente, empresa] = await Promise.all([
-    siguienteNumero("presupuesto"),
-    prisma.cliente.findFirst({ orderBy: { nombre: "asc" } }),
-    prisma.empresa.findUnique({ where: { id: 1 } }),
+    siguienteNumero(empresaId, "presupuesto"),
+    db.cliente.findFirst({ orderBy: { nombre: "asc" } }),
+    db.empresa.findFirst(),
   ]);
-  const p = await prisma.presupuesto.create({
+  const p = await db.presupuesto.create({
     data: {
+      empresaId,
       numero,
       clienteId: primerCliente?.id,
       titulo: "Nueva reforma",
       fecha: new Date(),
       iva: empresa?.ivaDefecto ?? 10,
       estado: "BORRADOR",
-      autor: user.name,
+      autor: user.nombre,
     },
   });
   revalidatePath("/presupuestos");
@@ -50,23 +55,27 @@ export type LineaIA = {
 };
 
 export async function crearPresupuestoConIA(lineas: LineaIA[], meta: { tipo: string; m2?: string }) {
-  const user = await requireUser();
+  const { db, empresaId, user } = await requireTenant();
   const [numero, primerCliente, empresa] = await Promise.all([
-    siguienteNumero("presupuesto"),
-    prisma.cliente.findFirst({ orderBy: { nombre: "asc" } }),
-    prisma.empresa.findUnique({ where: { id: 1 } }),
+    siguienteNumero(empresaId, "presupuesto"),
+    db.cliente.findFirst({ orderBy: { nombre: "asc" } }),
+    db.empresa.findFirst(),
   ]);
   const titulo = `${meta.tipo}${meta.m2 ? ` (${meta.m2} m²)` : ""}`;
-  const p = await prisma.presupuesto.create({
+  const p = await db.presupuesto.create({
     data: {
+      empresaId,
       numero,
       clienteId: primerCliente?.id,
       titulo,
       fecha: new Date(),
       iva: empresa?.ivaDefecto ?? 10,
       estado: "BORRADOR",
-      autor: user.name,
-      lineas: { create: lineas.map((l, i) => ({ ...l, orden: i })) },
+      autor: user.nombre,
+      // empresaId va explícito en las líneas: los `create` anidados NO pasan por el
+      // filtro automático (Prisma no se los enseña a la extensión), así que hay que
+      // ponerlo a mano. Si se olvidara, saltaría un NOT NULL, no una fuga.
+      lineas: { create: lineas.map((l, i) => ({ ...l, orden: i, empresaId })) },
     },
   });
   revalidatePath("/presupuestos");
@@ -74,8 +83,14 @@ export async function crearPresupuestoConIA(lineas: LineaIA[], meta: { tipo: str
 }
 
 export async function borrarPresupuesto(id: string) {
-  await requireAdmin();
-  await prisma.presupuesto.delete({ where: { id } });
+  const { db } = await requireTenantAdmin();
+  // Las facturas apuntan al presupuesto con NO ACTION, así que hay que
+  // desvincularlas antes de borrar (antes lo hacía el SET NULL de la base).
+  await db.$transaction(async (tx) => {
+    await tx.factura.updateMany({ where: { presupuestoId: id }, data: { presupuestoId: null } });
+    const r = await tx.presupuesto.deleteMany({ where: { id } });
+    if (r.count === 0) throw new Error("Presupuesto no encontrado");
+  });
   revalidatePath("/presupuestos");
 }
 
@@ -88,12 +103,20 @@ export type PresupuestoPatch = Partial<{
 }>;
 
 export async function actualizarPresupuesto(id: string, patch: PresupuestoPatch) {
-  await requireUser();
+  const { db } = await requireTenant();
   const { notas, ...resto } = patch;
   const huboOtroCambio = Object.keys(resto).length > 0;
-  if (huboOtroCambio) await assertNoBloqueado(id);
+  if (huboOtroCambio) await cargarEditable(db, id);
 
-  await prisma.presupuesto.update({
+  // El clienteId viene del navegador: comprobamos que es un cliente nuestro antes
+  // de asignarlo. La clave foránea compuesta lo rechazaría igualmente, pero así el
+  // mensaje es claro en vez de un error de base de datos.
+  if (resto.clienteId) {
+    const cliente = await db.cliente.findFirst({ where: { id: resto.clienteId }, select: { id: true } });
+    if (!cliente) throw new Error("Cliente no encontrado");
+  }
+
+  const r = await db.presupuesto.updateMany({
     where: { id },
     data: {
       ...resto,
@@ -101,16 +124,19 @@ export async function actualizarPresupuesto(id: string, patch: PresupuestoPatch)
       ...(notas !== undefined ? { notas } : {}),
     },
   });
+  if (r.count === 0) throw new Error("Presupuesto no encontrado");
   revalidatePath(`/presupuestos/${id}`);
 }
 
 export async function marcarEnviado(id: string) {
-  await requireUser();
-  const p = await prisma.presupuesto.findUniqueOrThrow({ where: { id } });
-  if (p.estado === "BORRADOR") {
-    await prisma.presupuesto.update({ where: { id }, data: { estado: "ENVIADO" } });
-    revalidatePath(`/presupuestos/${id}`);
-  }
+  const { db } = await requireTenant();
+  const r = await db.presupuesto.updateMany({
+    where: { id, estado: "BORRADOR" },
+    data: { estado: "ENVIADO" },
+  });
+  // count 0 puede significar "no es tuyo" o "ya no era borrador": ninguno es un
+  // error para el usuario, que solo está enviando el presupuesto por email.
+  if (r.count > 0) revalidatePath(`/presupuestos/${id}`);
 }
 
 export type LineaInput = {
@@ -128,24 +154,32 @@ function clampDescuento(d: number) {
 }
 
 export async function agregarLinea(presupuestoId: string, data: LineaInput) {
-  await requireUser();
-  await assertNoBloqueado(presupuestoId);
-  const count = await prisma.lineaPresupuesto.count({ where: { presupuestoId } });
-  await prisma.lineaPresupuesto.create({
-    data: { presupuestoId, ...data, descuento: clampDescuento(data.descuento), orden: count },
+  const { db, empresaId } = await requireTenant();
+  await cargarEditable(db, presupuestoId);
+  const count = await db.lineaPresupuesto.count({ where: { presupuestoId } });
+  await db.lineaPresupuesto.create({
+    data: { empresaId, presupuestoId, ...data, descuento: clampDescuento(data.descuento), orden: count },
   });
   revalidatePath(`/presupuestos/${presupuestoId}`);
 }
 
 export async function agregarMaterialDelCatalogo(presupuestoId: string, productoId: string) {
-  await requireUser();
-  await assertNoBloqueado(presupuestoId);
+  const { db, empresaId } = await requireTenant();
+  await cargarEditable(db, presupuestoId);
+
+  // Los DOS ids llegan del navegador. Este caso no lo cubre la clave foránea
+  // compuesta, porque la línea copia el nombre y el precio en vez de apuntar al
+  // producto: sin esta comprobación, una empresa podría leer los precios
+  // negociados de otra pasando el id de su material.
   const [producto, count] = await Promise.all([
-    prisma.producto.findUniqueOrThrow({ where: { id: productoId }, include: { proveedor: true } }),
-    prisma.lineaPresupuesto.count({ where: { presupuestoId } }),
+    db.producto.findFirst({ where: { id: productoId }, include: { proveedor: true } }),
+    db.lineaPresupuesto.count({ where: { presupuestoId } }),
   ]);
-  await prisma.lineaPresupuesto.create({
+  if (!producto) throw new Error("Material no encontrado");
+
+  await db.lineaPresupuesto.create({
     data: {
+      empresaId,
       presupuestoId,
       capitulo: "Materiales",
       concepto: producto.nombre,
@@ -160,10 +194,12 @@ export async function agregarMaterialDelCatalogo(presupuestoId: string, producto
 }
 
 export async function actualizarLinea(lineaId: string, patch: Partial<LineaInput>) {
-  await requireUser();
-  const linea = await prisma.lineaPresupuesto.findUniqueOrThrow({ where: { id: lineaId } });
-  await assertNoBloqueado(linea.presupuestoId);
-  await prisma.lineaPresupuesto.update({
+  const { db } = await requireTenant();
+  const linea = await db.lineaPresupuesto.findFirst({ where: { id: lineaId } });
+  if (!linea) throw new Error("Línea no encontrada");
+  await cargarEditable(db, linea.presupuestoId);
+
+  await db.lineaPresupuesto.updateMany({
     where: { id: lineaId },
     data: { ...patch, ...(patch.descuento !== undefined ? { descuento: clampDescuento(patch.descuento) } : {}) },
   });
@@ -171,18 +207,20 @@ export async function actualizarLinea(lineaId: string, patch: Partial<LineaInput
 }
 
 export async function borrarLinea(lineaId: string) {
-  await requireUser();
-  const linea = await prisma.lineaPresupuesto.findUniqueOrThrow({ where: { id: lineaId } });
-  await assertNoBloqueado(linea.presupuestoId);
-  await prisma.lineaPresupuesto.delete({ where: { id: lineaId } });
+  const { db } = await requireTenant();
+  const linea = await db.lineaPresupuesto.findFirst({ where: { id: lineaId } });
+  if (!linea) throw new Error("Línea no encontrada");
+  await cargarEditable(db, linea.presupuestoId);
+
+  await db.lineaPresupuesto.deleteMany({ where: { id: lineaId } });
   revalidatePath(`/presupuestos/${linea.presupuestoId}`);
 }
 
 export async function guardarFirma(presupuestoId: string, dataUrl: string) {
-  await requireUser();
-  await assertNoBloqueado(presupuestoId);
+  const { db } = await requireTenant();
+  await cargarEditable(db, presupuestoId);
   const ip = headers().get("x-forwarded-for")?.split(",")[0]?.trim() || headers().get("x-real-ip") || "";
-  await prisma.presupuesto.update({
+  await db.presupuesto.updateMany({
     where: { id: presupuestoId },
     data: { firma: dataUrl, fechaFirma: new Date(), firmaIp: ip, estado: "APROBADO" },
   });
@@ -190,18 +228,23 @@ export async function guardarFirma(presupuestoId: string, dataUrl: string) {
 }
 
 export async function crearFacturaDesdePresupuesto(presupuestoId: string) {
-  await requireAdmin();
-  const p = await prisma.presupuesto.findUniqueOrThrow({
+  const { db, empresaId } = await requireTenantAdmin();
+  const p = await db.presupuesto.findFirst({
     where: { id: presupuestoId },
     include: { lineas: true },
   });
+  if (!p) throw new Error("Presupuesto no encontrado");
   if (p.estado !== "APROBADO") throw new Error("Solo se puede facturar un presupuesto Aprobado.");
 
   const base = calcBase(p);
-  const numero = await siguienteNumero("factura");
-  await prisma.$transaction([
-    prisma.factura.create({
+
+  // El número se reserva DENTRO de la transacción: si algo falla, el contador se
+  // revierte y no queda un hueco en la numeración de facturas (lo exige Hacienda).
+  await db.$transaction(async (tx) => {
+    const numero = await siguienteNumero(empresaId, "factura", tx);
+    await tx.factura.create({
       data: {
+        empresaId,
         numero,
         presupuestoId: p.id,
         clienteId: p.clienteId,
@@ -211,9 +254,10 @@ export async function crearFacturaDesdePresupuesto(presupuestoId: string) {
         total: base * (1 + p.iva / 100),
         estado: "PENDIENTE",
       },
-    }),
-    prisma.presupuesto.update({ where: { id: p.id }, data: { estado: "FACTURADO" } }),
-  ]);
+    });
+    await tx.presupuesto.updateMany({ where: { id: p.id }, data: { estado: "FACTURADO" } });
+  });
+
   revalidatePath(`/presupuestos/${presupuestoId}`);
   revalidatePath("/facturas");
   redirect("/facturas");

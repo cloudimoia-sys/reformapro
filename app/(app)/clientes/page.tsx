@@ -1,10 +1,9 @@
-import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireTenant } from "@/lib/session";
 import ClientesClient from "./ClientesClient";
 
 export default async function ClientesPage() {
-  const user = await requireUser();
-  const clientes = await prisma.cliente.findMany({
+  const { user, db } = await requireTenant();
+  const clientes = await db.cliente.findMany({
     orderBy: { nombre: "asc" },
     include: { _count: { select: { presupuestos: true } } },
   });

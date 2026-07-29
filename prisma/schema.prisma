@@ -33,30 +33,68 @@ enum EstadoFactura {
   PAGADA
 }
 
-model Usuario {
-  id           String   @id @default(cuid())
-  nombre       String
-  email        String   @unique
-  passwordHash String
-  rol          Rol      @default(EMPLEADO)
-  createdAt    DateTime @default(now())
+enum PlanSuscripcion {
+  PRUEBA
+  BASICO
+  PRO
 }
 
-/// Fila única (siempre id = 1) con los datos fiscales de la empresa.
+enum EstadoSuscripcion {
+  PRUEBA
+  ACTIVA
+  SUSPENDIDA
+  CANCELADA
+}
+
+/// Raíz del tenant: cada empresa cliente de ReformaPro es una fila aquí, y TODOS los
+/// demás registros cuelgan de ella vía `empresaId`. Borrar una empresa borra sus datos.
 model Empresa {
-  id         Int     @id @default(1)
-  nombre     String
-  cif        String
-  direccion  String
-  tel        String
-  email      String
-  ivaDefecto Int     @default(10)
+  id            String            @id @default(cuid())
+  nombre        String
+  cif           String            @default("")
+  direccion     String            @default("")
+  tel           String            @default("")
+  email         String
+  ivaDefecto    Int               @default(10)
   /// Logo en base64 (data URL), opcional. Solo se muestra en las facturas si está puesto.
-  logo       String?
+  logo          String?
+  plan          PlanSuscripcion   @default(PRUEBA)
+  estadoSusc    EstadoSuscripcion @default(PRUEBA)
+  trialFinaliza DateTime?
+  createdAt     DateTime          @default(now())
+
+  usuarios     Usuario[]
+  clientes     Cliente[]
+  proveedores  Proveedor[]
+  productos    Producto[]
+  presupuestos Presupuesto[]
+  lineas       LineaPresupuesto[]
+  facturas     Factura[]
+  counters     Counter[]
+}
+
+model Usuario {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  nombre    String
+  /// Único a nivel global (no por empresa) para que el login no tenga que preguntar
+  /// a qué empresa perteneces. Un email = una cuenta en toda la plataforma.
+  email           String   @unique
+  passwordHash    String
+  rol             Rol      @default(EMPLEADO)
+  emailVerificado Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  tokensReset PasswordResetToken[]
+
+  @@index([empresaId])
 }
 
 model Cliente {
   id           String        @id @default(cuid())
+  empresaId    String
+  empresa      Empresa       @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   nombre       String
   tel          String?
   email        String?
@@ -66,32 +104,53 @@ model Cliente {
   createdAt    DateTime      @default(now())
   presupuestos Presupuesto[]
   facturas     Factura[]
+
+  /// Necesario para que las claves foráneas compuestas de abajo puedan apuntar al par
+  /// (id, empresaId) y así Postgres impida referenciar un cliente de otra empresa.
+  @@unique([id, empresaId])
+  @@index([empresaId])
 }
 
 model Proveedor {
   id        String     @id @default(cuid())
+  empresaId String
+  empresa   Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   nombre    String
   web       String?
   productos Producto[]
+
+  @@unique([id, empresaId])
+  @@index([empresaId])
 }
 
 model Producto {
   id        String    @id @default(cuid())
+  empresaId String
+  empresa   Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   provId    String
-  proveedor Proveedor @relation(fields: [provId], references: [id], onDelete: Cascade)
+  proveedor Proveedor @relation(fields: [provId, empresaId], references: [id, empresaId], onDelete: Cascade)
   nombre    String
   unidad    String
   precio    Float
   fecha     DateTime  @default(now())
   /// URL de la ficha del producto en la web del proveedor, para el botón "Comprobar precio".
   url       String?
+
+  @@index([empresaId])
+  @@index([provId, empresaId])
 }
 
 model Presupuesto {
-  id         String             @id @default(cuid())
-  numero     String             @unique
-  clienteId  String?
-  cliente    Cliente?           @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  /// Correlativo por empresa: cada empresa tiene su propia serie PRE-2026-001.
+  numero    String
+  clienteId String?
+  /// NoAction (no SetNull): en una FK compuesta, SET NULL anularía también empresaId,
+  /// que es NOT NULL. borrarCliente() desvincula explícitamente antes de borrar.
+  cliente   Cliente? @relation(fields: [clienteId, empresaId], references: [id, empresaId], onDelete: NoAction, onUpdate: NoAction)
+
   titulo     String
   fecha      DateTime           @default(now())
   iva        Int                @default(10)
@@ -104,12 +163,19 @@ model Presupuesto {
   createdAt  DateTime           @default(now())
   lineas     LineaPresupuesto[]
   facturas   Factura[]
+
+  @@unique([empresaId, numero])
+  @@unique([id, empresaId])
+  @@index([empresaId])
+  @@index([clienteId, empresaId])
 }
 
 model LineaPresupuesto {
   id            String      @id @default(cuid())
+  empresaId     String
+  empresa       Empresa     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   presupuestoId String
-  presupuesto   Presupuesto @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
+  presupuesto   Presupuesto @relation(fields: [presupuestoId, empresaId], references: [id, empresaId], onDelete: Cascade)
   capitulo      String?
   concepto      String
   descripcion   String?
@@ -119,25 +185,68 @@ model LineaPresupuesto {
   /// Descuento en % (0-100) aplicado sobre esta línea (material, mano de obra, lo que sea).
   descuento     Float       @default(0)
   orden         Int         @default(0)
+
+  @@index([empresaId])
+  @@index([presupuestoId, empresaId])
 }
 
 model Factura {
-  id            String        @id @default(cuid())
-  numero        String        @unique
+  id            String       @id @default(cuid())
+  empresaId     String
+  empresa       Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  /// Correlativo por empresa. Sin huecos: lo exige la normativa española.
+  numero        String
   presupuestoId String?
-  presupuesto   Presupuesto?  @relation(fields: [presupuestoId], references: [id], onDelete: SetNull)
+  presupuesto   Presupuesto? @relation(fields: [presupuestoId, empresaId], references: [id, empresaId], onDelete: NoAction, onUpdate: NoAction)
   clienteId     String?
-  cliente       Cliente?      @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  fecha         DateTime      @default(now())
-  base          Float
-  iva           Int
-  total         Float
-  estado        EstadoFactura @default(PENDIENTE)
+  cliente       Cliente?     @relation(fields: [clienteId, empresaId], references: [id, empresaId], onDelete: NoAction, onUpdate: NoAction)
+
+  fecha  DateTime      @default(now())
+  base   Float
+  iva    Int
+  total  Float
+  estado EstadoFactura @default(PENDIENTE)
+
+  @@unique([empresaId, numero])
+  @@index([empresaId])
+  @@index([presupuestoId, empresaId])
+  @@index([clienteId, empresaId])
 }
 
-/// Contador atómico para numerar presupuestos/facturas (PRE-2026-001, FAC-2026-001...).
-/// id tiene forma "presupuesto:2026" / "factura:2026".
+/// Contador atómico para numerar presupuestos/facturas, uno por empresa y año.
 model Counter {
-  id    String @id
-  value Int    @default(0)
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  /// "presupuesto" o "factura".
+  tipo      String
+  anio      Int
+  value     Int     @default(0)
+
+  @@id([empresaId, tipo, anio])
+}
+
+/// Token de un solo uso para restablecer la contraseña. Se guarda solo el hash:
+/// quien lea la base de datos no puede usar los tokens pendientes.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  usuarioId String
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  expiraEn  DateTime
+  usadoEn   DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([usuarioId])
+}
+
+/// Límite de altas por IP. En BD y no en memoria porque en Vercel cada función
+/// serverless tiene su propia memoria y un contador local no serviría de nada.
+model RegistroIntento {
+  id        String   @id @default(cuid())
+  /// SHA-256 de la IP + secreto: permite contar sin almacenar la IP en claro (RGPD).
+  ipHash    String
+  createdAt DateTime @default(now())
+
+  @@index([ipHash, createdAt])
+  @@index([createdAt])
 }

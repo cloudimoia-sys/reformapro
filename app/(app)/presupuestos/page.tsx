@@ -1,11 +1,10 @@
-import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireTenant } from "@/lib/session";
 import { totalPres } from "@/lib/presupuesto";
 import PresupuestosListClient from "./PresupuestosListClient";
 
 export default async function PresupuestosPage() {
-  const user = await requireUser();
-  const presupuestos = await prisma.presupuesto.findMany({
+  const { user, db } = await requireTenant();
+  const presupuestos = await db.presupuesto.findMany({
     orderBy: { createdAt: "desc" },
     include: { lineas: true, cliente: true },
   });

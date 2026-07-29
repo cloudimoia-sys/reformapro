@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { requireTenant } from "@/lib/session";
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 
@@ -15,8 +13,12 @@ type PartidaIA = {
 };
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  let db;
+  try {
+    ({ db } = await requireTenant());
+  } catch {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -28,9 +30,12 @@ export async function POST(req: Request) {
 
   const f = await req.json();
 
+  // Filtrado por empresa: antes esto cargaba el catálogo de TODAS las empresas y lo
+  // metía en el prompt que se manda a Google, así que cada cliente veía los precios
+  // negociados de los demás en las partidas generadas.
   const [productos, proveedores] = await Promise.all([
-    prisma.producto.findMany(),
-    prisma.proveedor.findMany(),
+    db.producto.findMany(),
+    db.proveedor.findMany(),
   ]);
   const catalogo = productos
     .map((p) => {

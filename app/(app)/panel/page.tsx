@@ -1,25 +1,24 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireTenant } from "@/lib/session";
 import { eur } from "@/lib/format";
 import { totalPres, estadoClase, estadoLabel } from "@/lib/presupuesto";
 
 export default async function PanelPage() {
-  const user = await requireUser();
+  const { user, db } = await requireTenant();
   const isAdmin = user.rol === "ADMIN";
 
   const [totalPresupuestos, presupuestosAprobados, ultimos, facturas] = await Promise.all([
-    prisma.presupuesto.count(),
-    prisma.presupuesto.findMany({
+    db.presupuesto.count(),
+    db.presupuesto.findMany({
       where: { estado: { in: ["APROBADO", "FACTURADO"] } },
       include: { lineas: true },
     }),
-    prisma.presupuesto.findMany({
+    db.presupuesto.findMany({
       orderBy: { createdAt: "desc" },
       take: 6,
       include: { lineas: true, cliente: true },
     }),
-    isAdmin ? prisma.factura.findMany() : Promise.resolve([]),
+    isAdmin ? db.factura.findMany() : Promise.resolve([]),
   ]);
 
   const obraAprobada = presupuestosAprobados.reduce((s, p) => s + totalPres(p), 0);

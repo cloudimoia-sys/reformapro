@@ -89,3 +89,42 @@ Vía sin coste: hosting en Vercel (gratis para este volumen) + Postgres en Neon 
 
 - **Admin**: todo, incluida facturación, equipo y datos de empresa.
 - **Empleado**: clientes, precios y presupuestos, sin acceso a facturación/equipo/empresa ni permiso de borrado. La restricción se aplica tanto en la interfaz como dentro de cada Server Action (no es solo cosmética).
+
+## Multi-empresa: cómo se aísla cada cliente
+
+Cada empresa que se registra tiene sus propios datos, invisibles para las demás. Como una sola consulta sin filtrar bastaría para filtrar datos entre clientes —y no daría ningún error, solo devolvería de más—, el aislamiento no depende de acordarse de escribir el filtro:
+
+| Capa | Qué impide |
+|---|---|
+| `lib/prisma.ts` exporta `prismaUnsafe` | El nombre avisa. El cliente normal ni siquiera existe. |
+| `lib/tenantDb.ts` | Inyecta el filtro de empresa en cada consulta y **prohíbe** `findUnique`/`update`/`delete`/`upsert`, que no admiten filtro y son las que reciben ids del navegador. |
+| Claves foráneas compuestas `(id, empresaId)` | Es **Postgres** quien impide referenciar datos de otra empresa, aunque el código fallara. |
+| `scripts/check-tenant-scope.mjs` (en `prebuild`) | Rompe el despliegue si alguien usa el cliente sin filtrar o cuela una operación prohibida. |
+
+La única forma de consultar datos es `requireTenant()`, que no puede devolver nada sin empresa:
+
+```ts
+const { user, empresaId, db } = await requireTenant();
+const clientes = await db.cliente.findMany(); // solo los de esta empresa
+```
+
+Para comprobarlo (contra una base de datos **de pruebas**, borra datos):
+
+```bash
+npm run test:aislamiento
+```
+
+Monta dos empresas e intenta leer y modificar los datos de una desde la otra: 38 comprobaciones que deben pasar todas.
+
+## Alta de nuevos clientes
+
+- La portada ofrece **«Crear cuenta»** e **«Iniciar sesión»**.
+- Cada alta crea una empresa nueva con 14 días de prueba.
+- Mientras `REGISTRO_CODIGO` tenga valor, el registro pide ese código. Bórrala para abrir el alta a cualquiera.
+- Hay límite de altas por IP (guardado en base de datos, porque en Vercel un contador en memoria no serviría) y campo trampa anti-bots.
+
+## Email
+
+`lib/email.ts` funciona con **Brevo** (`BREVO_API_KEY`) o **Resend** (`RESEND_API_KEY`). Sin ninguno, los correos se escriben por consola, lo que basta para desarrollo.
+
+Para producción sin dominio propio, usa **Brevo**: permite verificar una única dirección remitente (tu Gmail). Resend exige verificar un dominio entero, así que solo sirve si compras uno.

@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/session";
+import { requireTenantAdmin } from "@/lib/session";
 
 export async function marcarFacturaPagada(id: string) {
-  await requireAdmin();
-  await prisma.factura.update({ where: { id }, data: { estado: "PAGADA" } });
+  const { db } = await requireTenantAdmin();
+  // updateMany (no update) para que el filtro de empresa se aplique: así el id que
+  // llega del navegador solo puede tocar facturas propias. count 0 = no es tuya.
+  const r = await db.factura.updateMany({ where: { id }, data: { estado: "PAGADA" } });
+  if (r.count === 0) throw new Error("Factura no encontrada");
   revalidatePath("/facturas");
 }

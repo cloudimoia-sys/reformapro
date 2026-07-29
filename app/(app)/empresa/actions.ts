@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/session";
+import { requireTenantAdmin } from "@/lib/session";
 
 export type EmpresaInput = {
   nombre: string;
@@ -14,36 +13,23 @@ export type EmpresaInput = {
 };
 
 export async function actualizarEmpresa(data: EmpresaInput) {
-  await requireAdmin();
-  await prisma.empresa.upsert({
-    where: { id: 1 },
-    create: { id: 1, ...data },
-    update: data,
-  });
+  const { db, empresaId } = await requireTenantAdmin();
+  // Antes era un upsert sobre id:1, la fila única. Ahora cada empresa tiene la suya.
+  // El id sale de la sesión (y el cliente filtrado lo vuelve a forzar), nunca del
+  // navegador, así que aquí un update normal sí es seguro.
+  await db.empresa.update({ where: { id: empresaId }, data });
   revalidatePath("/empresa");
 }
 
 const LOGO_MAX_BYTES = 500 * 1024; // 500 KB en base64, de sobra para un logo pequeño
 
 export async function actualizarLogoEmpresa(logo: string | null) {
-  const admin = await requireAdmin();
+  const { db, empresaId } = await requireTenantAdmin();
   if (logo) {
     if (!logo.startsWith("data:image/")) throw new Error("El logo debe ser una imagen.");
     if (logo.length > LOGO_MAX_BYTES) throw new Error("El logo es demasiado grande.");
   }
-  await prisma.empresa.upsert({
-    where: { id: 1 },
-    create: {
-      id: 1,
-      nombre: "",
-      cif: "",
-      direccion: "",
-      tel: "",
-      email: admin.email || "",
-      logo,
-    },
-    update: { logo },
-  });
+  await db.empresa.update({ where: { id: empresaId }, data: { logo } });
   revalidatePath("/empresa");
   revalidatePath("/facturas");
 }
