@@ -94,14 +94,24 @@ export function tenantDb(empresaId: string) {
           if (!model) return query(args);
 
           // `Empresa` es la propia empresa: se filtra por su clave primaria, no por
-          // `empresaId`. Forzamos el id siempre, así que aquí las operaciones "únicas"
-          // sí son seguras (el where lo ponemos nosotros, no el navegador).
+          // `empresaId`. Forzamos el id, así que aquí las operaciones "únicas" sí son
+          // seguras (el where lo ponemos nosotros, no el navegador).
           if (model === "Empresa") {
             const a = (args ?? {}) as Record<string, unknown>;
             if (operation === "create" || operation === "createMany") {
               throw new Error("Crear empresas solo desde el registro (usa prismaUnsafe en app/registro)");
             }
-            a.where = { ...(a.where as object), id: empresaId };
+
+            // Si quien llama pidió OTRA empresa, se aborta en vez de reescribir el id
+            // por el propio. Sobrescribir en silencio no filtraría datos ajenos, pero
+            // convertiría "edita la empresa X" en "edita la mía": una petición
+            // equivocada acabaría modificando datos propios sin avisar.
+            const where = (a.where ?? {}) as { id?: unknown };
+            if (where.id !== undefined && where.id !== empresaId) {
+              throw new Error("Empresa no encontrada");
+            }
+
+            a.where = { ...where, id: empresaId };
             return query(a);
           }
 

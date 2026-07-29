@@ -4,12 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/check-tenant-scope.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
+    "test:aislamiento": "tsx scripts/verificar-aislamiento.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {
