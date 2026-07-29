@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { requireTenant, requireTenantAdmin, type ContextoTenant } from "@/lib/session";
-import { ejecutar, type Resultado } from "@/lib/accion";
+import { ejecutar, type Resultado, type ResultadoConRedirect } from "@/lib/accion";
 import { siguienteNumero } from "@/lib/counter";
 import { base as calcBase } from "@/lib/presupuesto";
 
@@ -23,7 +23,7 @@ async function cargarEditable(db: ContextoTenant["db"], id: string) {
   return p;
 }
 
-export async function crearPresupuestoBlanco(): Promise<Resultado> {
+export async function crearPresupuestoBlanco(): Promise<ResultadoConRedirect> {
   return ejecutar("crearPresupuestoBlanco", async () => {
     const { db, empresaId, user } = await requireTenant();
     const [numero, primerCliente, empresa] = await Promise.all([
@@ -65,7 +65,7 @@ export type LineaIA = {
 export async function crearPresupuestoConIA(
   lineas: LineaIA[],
   meta: { tipo: string; m2?: string }
-): Promise<Resultado> {
+): Promise<ResultadoConRedirect> {
   return ejecutar("crearPresupuestoConIA", async () => {
     const { db, empresaId, user } = await requireTenant();
     const [numero, primerCliente, empresa] = await Promise.all([
@@ -257,7 +257,7 @@ export async function guardarFirma(presupuestoId: string, dataUrl: string): Prom
   });
 }
 
-export async function crearFacturaDesdePresupuesto(presupuestoId: string): Promise<Resultado> {
+export async function crearFacturaDesdePresupuesto(presupuestoId: string): Promise<ResultadoConRedirect> {
   return ejecutar("crearFacturaDesdePresupuesto", async () => {
     const { db, empresaId } = await requireTenantAdmin();
     const p = await db.presupuesto.findFirst({

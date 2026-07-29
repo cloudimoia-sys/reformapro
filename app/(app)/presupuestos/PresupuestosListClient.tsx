@@ -6,6 +6,7 @@ import { eur } from "@/lib/format";
 import { estadoClase, estadoLabel } from "@/lib/presupuesto";
 import WizardIA from "@/components/WizardIA";
 import { crearPresupuestoBlanco, crearPresupuestoConIA, borrarPresupuesto, type LineaIA } from "./actions";
+import { fallo } from "@/lib/accion";
 
 type Fila = {
   id: string;
@@ -22,19 +23,20 @@ export default function PresupuestosListClient({ presupuestos, isAdmin }: { pres
   const [wizard, setWizard] = useState(false);
   const [creando, setCreando] = useState(false);
 
+  // fallo() tiene en cuenta que, al redirigir, Next resuelve la promesa con
+  // undefined: eso ES el éxito, no un fallo.
   const nuevoEnBlanco = async () => {
     setCreando(true);
-    // Al ir bien redirige, así que solo vuelve de aquí cuando algo ha fallado.
-    const r = await crearPresupuestoBlanco();
+    const e = fallo(await crearPresupuestoBlanco());
     setCreando(false);
-    if (!r.ok) window.alert(r.error);
+    if (e) window.alert(e);
   };
 
   // Sin cerrar el asistente aquí: si la creación falla, el propio asistente
   // muestra el motivo. Al terminar bien, la acción redirige al presupuesto nuevo.
   const onDoneIA = async (lineas: LineaIA[], meta: { tipo: string; m2?: string }) => {
-    const r = await crearPresupuestoConIA(lineas, meta);
-    if (!r.ok) throw new Error(r.error);
+    const e = fallo(await crearPresupuestoConIA(lineas, meta));
+    if (e) throw new Error(e);
   };
 
   const borrar = async (id: string, numero: string, e: React.MouseEvent) => {

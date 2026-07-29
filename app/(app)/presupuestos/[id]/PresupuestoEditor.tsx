@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { eur } from "@/lib/format";
 import { estadoClase, estadoLabel, importeLinea } from "@/lib/presupuesto";
+import { fallo } from "@/lib/accion";
 import { exportPDF, exportWord, exportExcel } from "@/lib/docExport";
 import SignaturePad from "@/components/SignaturePad";
 import {
@@ -156,9 +157,10 @@ export default function PresupuestoEditor({
           <button
             className="btn sm"
             onClick={async () => {
-              // Al ir bien redirige a /facturas; solo vuelve si algo ha fallado.
-              const r = await crearFacturaDesdePresupuesto(p.id);
-              if (!r.ok) setError(r.error);
+              // fallo() contempla que al redirigir a /facturas la promesa se
+              // resuelva con undefined, que es el caso de éxito.
+              const e = fallo(await crearFacturaDesdePresupuesto(p.id));
+              if (e) setError(e);
             }}
           >
             Crear factura

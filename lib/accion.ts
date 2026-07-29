@@ -12,6 +12,25 @@
 export type Resultado<T = void> = { ok: true; datos: T } | { ok: false; error: string };
 
 /**
+ * Resultado de una acción que, cuando todo va bien, redirige a otra página.
+ *
+ * Ojo con el `undefined`: si la acción llama a `redirect()`, Next no devuelve
+ * ningún valor al navegador — se limita a ordenarle que navegue— y la promesa
+ * se resuelve con `undefined`. Es decir, **`undefined` significa que ha ido
+ * bien**. Comprobar `r.ok` sin más revienta con "Cannot read properties of
+ * undefined" justo en el caso de éxito.
+ *
+ * Usa `fallo(r)` para leerlo sin equivocarte.
+ */
+export type ResultadoConRedirect<T = void> = Resultado<T> | undefined;
+
+/** Devuelve el mensaje de error, o null si fue bien (incluida la redirección). */
+export function fallo<T>(r: ResultadoConRedirect<T>): string | null {
+  if (!r) return null; // redirigió: éxito
+  return r.ok ? null : r.error;
+}
+
+/**
  * Ejecuta el cuerpo de una acción y convierte cualquier excepción en un resultado.
  *
  * Los `Error` que lanzamos nosotros a propósito (validaciones, "no encontrado")
