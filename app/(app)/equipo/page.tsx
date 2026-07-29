@@ -1,13 +1,12 @@
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireTenant } from "@/lib/session";
 import EquipoClient from "./EquipoClient";
 
 export default async function EquipoPage() {
-  const user = await requireUser();
+  const { user, db } = await requireTenant();
   if (user.rol !== "ADMIN") redirect("/panel");
 
-  const usuarios = await prisma.usuario.findMany({ orderBy: { nombre: "asc" } });
+  const usuarios = await db.usuario.findMany({ orderBy: { nombre: "asc" } });
 
   return (
     <EquipoClient

@@ -1,18 +1,17 @@
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireTenant } from "@/lib/session";
 import FacturasClient from "./FacturasClient";
 
 export default async function FacturasPage() {
-  const user = await requireUser();
+  const { user, db } = await requireTenant();
   if (user.rol !== "ADMIN") redirect("/panel");
 
   const [facturas, empresa] = await Promise.all([
-    prisma.factura.findMany({
+    db.factura.findMany({
       orderBy: { fecha: "desc" },
       include: { cliente: true, presupuesto: { include: { lineas: { orderBy: { orden: "asc" } } } } },
     }),
-    prisma.empresa.findUnique({ where: { id: 1 } }),
+    db.empresa.findFirst(),
   ]);
 
   const data = facturas.map((f) => ({

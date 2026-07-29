@@ -1,18 +1,19 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireTenant } from "@/lib/session";
 import PresupuestoEditor from "./PresupuestoEditor";
 
 export default async function PresupuestoDetailPage({ params }: { params: { id: string } }) {
-  const user = await requireUser();
+  const { user, db } = await requireTenant();
   const [presupuesto, clientes, productos, empresa] = await Promise.all([
-    prisma.presupuesto.findUnique({
+    // findFirst y no findUnique: así el id de la URL pasa por el filtro de empresa
+    // y pedir el presupuesto de otro cliente devuelve 404 en vez de sus datos.
+    db.presupuesto.findFirst({
       where: { id: params.id },
       include: { lineas: { orderBy: { orden: "asc" } } },
     }),
-    prisma.cliente.findMany({ orderBy: { nombre: "asc" } }),
-    prisma.producto.findMany({ orderBy: { nombre: "asc" } }),
-    prisma.empresa.findUnique({ where: { id: 1 } }),
+    db.cliente.findMany({ orderBy: { nombre: "asc" } }),
+    db.producto.findMany({ orderBy: { nombre: "asc" } }),
+    db.empresa.findFirst(),
   ]);
 
   if (!presupuesto || !empresa) notFound();

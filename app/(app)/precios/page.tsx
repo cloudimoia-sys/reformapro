@@ -1,13 +1,12 @@
-import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireTenant } from "@/lib/session";
 import { hoy } from "@/lib/format";
 import PreciosClient from "./PreciosClient";
 
 export default async function PreciosPage() {
-  const user = await requireUser();
+  const { user, db } = await requireTenant();
   const [proveedores, productos] = await Promise.all([
-    prisma.proveedor.findMany({ orderBy: { nombre: "asc" } }),
-    prisma.producto.findMany({ orderBy: { nombre: "asc" } }),
+    db.proveedor.findMany({ orderBy: { nombre: "asc" } }),
+    db.producto.findMany({ orderBy: { nombre: "asc" } }),
   ]);
 
   const data = productos.map((p) => ({

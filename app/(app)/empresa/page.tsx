@@ -1,13 +1,13 @@
-import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { notFound, redirect } from "next/navigation";
+import { requireTenant } from "@/lib/session";
 import EmpresaClient from "./EmpresaClient";
 
 export default async function EmpresaPage() {
-  const user = await requireUser();
+  const { user, db } = await requireTenant();
   if (user.rol !== "ADMIN") redirect("/panel");
 
-  const empresa = await prisma.empresa.findUniqueOrThrow({ where: { id: 1 } });
+  const empresa = await db.empresa.findFirst();
+  if (!empresa) notFound();
 
   return (
     <EmpresaClient

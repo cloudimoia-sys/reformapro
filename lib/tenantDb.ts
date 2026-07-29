@@ -82,7 +82,13 @@ export function tenantDb(empresaId: string) {
     name: "aislamiento-por-empresa",
     query: {
       $allModels: {
-        async $allOperations({ model, operation, args, query }) {
+        async $allOperations(params) {
+          const { model, operation, args } = params;
+          // `query` es una unión de todas las firmas posibles (una por operación), que
+          // TypeScript no sabe invocar con un argumento genérico. Aquí manipulamos los
+          // args de forma uniforme, así que la reducimos a su forma común.
+          const query = params.query as (a: unknown) => Promise<unknown>;
+
           // Operaciones sin modelo ($queryRaw y similares) no se pueden filtrar.
           // Hoy no se usa ninguna; si alguien añade una, que sea una decisión consciente.
           if (!model) return query(args);
