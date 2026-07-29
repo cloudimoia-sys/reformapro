@@ -27,8 +27,9 @@ export default function PresupuestosListClient({ presupuestos, isAdmin }: { pres
     await crearPresupuestoBlanco();
   };
 
+  // Sin cerrar el asistente aquí: si la creación falla, el propio asistente
+  // muestra el error. Al terminar bien, la acción redirige al presupuesto nuevo.
   const onDoneIA = async (lineas: LineaIA[], meta: { tipo: string; m2?: string }) => {
-    setWizard(false);
     await crearPresupuestoConIA(lineas, meta);
   };
 

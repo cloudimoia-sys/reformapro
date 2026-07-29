@@ -3,6 +3,13 @@ import { requireTenant } from "@/lib/session";
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 
+/**
+ * Una obra completa tarda ~18 s en generarse, y el límite por defecto de una
+ * función en Vercel son 10 s: sin esto la petición se corta a media generación y
+ * el asistente parece "no hacer nada". 60 s es el máximo del plan gratuito.
+ */
+export const maxDuration = 60;
+
 type PartidaIA = {
   capitulo?: string;
   concepto?: string;
@@ -94,11 +101,21 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          // Generoso por dos motivos: los modelos Gemini "thinking" gastan parte del
-          // presupuesto razonando antes de escribir el JSON, y una obra completa puede
-          // llegar a 40 partidas. Si se queda corto, el JSON sale cortado y no se puede leer.
-          generationConfig: { maxOutputTokens: 24576, responseMimeType: "application/json" },
+          generationConfig: {
+            // Generoso: los modelos Gemini "thinking" gastan parte del presupuesto
+            // razonando antes de escribir el JSON, y una obra completa llega a 40
+            // partidas. Si se queda corto, el JSON sale cortado y no se puede leer.
+            maxOutputTokens: 24576,
+            responseMimeType: "application/json",
+            // Baja el razonamiento interno: reduce la espera de ~46 s a ~18 s sin
+            // perder calidad (mismos capítulos y partidas en las pruebas), y deja
+            // margen de sobra frente al límite de 60 s de la función.
+            thinkingConfig: { thinkingLevel: "low" },
+          },
         }),
+        // Corta antes de que lo haga Vercel (60 s): así controlamos el fallo y
+        // damos un motivo claro en vez de que la petición muera sin explicación.
+        signal: AbortSignal.timeout(50000),
       }
     );
 
@@ -132,6 +149,17 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
     return NextResponse.json({ lineas });
   } catch (e) {
     console.error("Error generando presupuesto con IA:", e);
-    return NextResponse.json({ error: "No se pudo generar el presupuesto." }, { status: 502 });
+
+    // Distinguir el caso lento del resto: es el más probable en obras grandes y
+    // el consejo útil ("dilo más concreto") es distinto al de un fallo genérico.
+    const seAgotoElTiempo = e instanceof DOMException && e.name === "TimeoutError";
+    return NextResponse.json(
+      {
+        error: seAgotoElTiempo
+          ? "La IA tardó demasiado. Prueba a describir la obra de forma más concreta o vuelve a intentarlo."
+          : "No se pudo generar el presupuesto. Vuelve a intentarlo o crea las partidas a mano.",
+      },
+      { status: 502 }
+    );
   }
 }

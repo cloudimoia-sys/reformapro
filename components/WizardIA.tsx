@@ -79,7 +79,7 @@ export default function WizardIA({
   onDone,
   onCancel,
 }: {
-  onDone: (lineas: LineaIA[], meta: { tipo: string; m2?: string }) => void;
+  onDone: (lineas: LineaIA[], meta: { tipo: string; m2?: string }) => Promise<void> | void;
   onCancel: () => void;
 }) {
   const [f, setF] = useState<Form>({ tipo: "Baño completo", m2: "", calidad: "Media", estancias: "", detalles: "" });
@@ -96,15 +96,28 @@ export default function WizardIA({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(f),
       });
-      if (!r.ok) throw new Error("fallo de red");
+
+      if (!r.ok) {
+        // El servidor manda un motivo en español; si no llega nada legible es que
+        // la petición se cortó por el camino (normalmente, por tardar demasiado).
+        const detalle = await r.json().catch(() => null);
+        throw new Error(detalle?.error || "La generación tardó demasiado. Vuelve a intentarlo.");
+      }
+
       const data = await r.json();
       const lineas: LineaIA[] = data.lineas;
-      if (!lineas?.length) throw new Error("sin partidas");
-      onDone(lineas, { tipo: f.tipo, m2: f.m2 });
-    } catch {
-      setError("No se pudo generar el presupuesto. Vuelve a intentarlo o crea las partidas a mano.");
+      if (!lineas?.length) throw new Error("La IA no devolvió ninguna partida. Vuelve a intentarlo.");
+
+      // Se espera a que el presupuesto quede creado ANTES de cerrar el asistente.
+      // Antes se cerraba primero y, si la creación fallaba, no se veía ningún
+      // error: parecía que el botón no hacía nada.
+      await onDone(lineas, { tipo: f.tipo, m2: f.m2 });
+    } catch (e: any) {
+      // redirect() de Next lanza una excepción especial para navegar; no es un fallo.
+      if (e?.digest?.startsWith?.("NEXT_REDIRECT")) throw e;
+      setError(e?.message || "No se pudo generar el presupuesto. Vuelve a intentarlo o crea las partidas a mano.");
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
