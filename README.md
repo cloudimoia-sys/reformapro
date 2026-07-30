@@ -25,6 +25,29 @@ Si además quieres datos de ejemplo (proveedores, catálogo de precios, un clien
 
 Genera `NEXTAUTH_SECRET` con `openssl rand -base64 32`. Consigue `GEMINI_API_KEY` en aistudio.google.com/apikey (capa gratuita) — sin ella, el asistente IA de presupuestos no funcionará (el resto de la app sí).
 
+### ⚠️ Nunca uses la base de datos de producción como "shadow database"
+
+`prisma migrate diff --from-migrations` y `prisma migrate dev` **vacían** la base que
+se les pasa en `--shadow-database-url`: la borran entera y reproducen las migraciones
+encima para calcular el diff. Apuntar ahí a producción destruye todos los datos, sin
+preguntar y sin aviso previo. Ya pasó una vez en este proyecto.
+
+Para eso está la base local de Docker, que es desechable:
+
+```bash
+npx prisma migrate diff --from-migrations prisma/migrations \
+  --to-schema-datamodel prisma/schema.prisma \
+  --shadow-database-url "postgresql://reformapro:reformapro@localhost:5432/shadow" \
+  --script > prisma/migrations/<fecha>_<nombre>/migration.sql
+```
+
+Y sobre producción, dos reglas:
+
+1. **Mira antes de tocar.** Cuenta las filas de las tablas principales; si salen a
+   cero cuando esperabas datos, para y averigua por qué antes de seguir.
+2. **Aplica el SQL revisado**, no un comando que decida solo. Comprueba que solo
+   contiene `CREATE`/`ALTER ... ADD`, y ejecútalo dentro de una transacción.
+
 ## Despliegue gratis (Vercel + Neon)
 
 Vía sin coste: hosting en Vercel (gratis para este volumen) + Postgres en Neon (capa gratuita) + subdominio gratis tipo `tu-proyecto.vercel.app`. No hace falta Docker para esto — Vercel construye directo desde el repositorio de Git.
