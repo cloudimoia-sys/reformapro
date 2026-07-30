@@ -162,13 +162,16 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
   } catch (e) {
     console.error("Error generando presupuesto con IA:", e);
 
-    // Distinguir el caso lento del resto: es el más probable en obras grandes y
-    // el consejo útil ("dilo más concreto") es distinto al de un fallo genérico.
-    const seAgotoElTiempo = e instanceof DOMException && e.name === "TimeoutError";
+    // El mensaje no culpa al usuario de escribir de más: llegar aquí significa
+    // que Gemini no contestó ni al reintento, y eso pasa igual con un baño de
+    // cuatro líneas que con una obra entera. Pedirle "descríbelo más concreto"
+    // le hacía perder el tiempo reescribiendo algo que no era el problema.
+    const seAgotoElTiempo =
+      e?.name === "TimeoutError" || e?.name === "AbortError" || e instanceof DOMException;
     return NextResponse.json(
       {
         error: seAgotoElTiempo
-          ? "La IA tardó demasiado. Prueba a describir la obra de forma más concreta o vuelve a intentarlo."
+          ? "El servicio de IA no ha respondido a tiempo. Vuelve a intentarlo: casi siempre va a la segunda."
           : "No se pudo generar el presupuesto. Vuelve a intentarlo o crea las partidas a mano.",
       },
       { status: 502 }

@@ -25,18 +25,29 @@ export type Parte =
 /** Presupuesto total de la petición: la función de Vercel muere a los 60 s. */
 const LIMITE_TOTAL_MS = 52000;
 /** Por debajo de esto no merece la pena reintentar: no daría tiempo a terminar. */
-const MINIMO_PARA_REINTENTAR_MS = 20000;
+const MINIMO_PARA_REINTENTAR_MS = 18000;
+/**
+ * Tope de cada intento por separado.
+ *
+ * Es la pieza clave: una generación normal tarda 6-8 s, así que 22 s ya es de
+ * sobra. Sin este tope, un único intento colgado se comía los 52 s enteros y no
+ * quedaba margen para reintentar — y quedarse colgado es precisamente el fallo
+ * más habitual de la capa gratuita (medido: 26 s para un texto trivial). Cortando
+ * antes, un cuelgue deja sitio a un segundo intento que casi siempre va bien.
+ */
+const LIMITE_POR_INTENTO_MS = 22000;
 
 /**
  * Llama a Gemini reintentando los fallos pasajeros, sin pasarse del reloj.
  *
- * La capa gratuita satura a ratos (429) y Google devuelve 500/503 de vez en
- * cuando; también se ralentiza mucho bajo carga. Sin reintento, ese tropiezo
+ * La capa gratuita satura a ratos (429), Google devuelve 500/503 de vez en
+ * cuando, y a ratos simplemente no contesta. Sin reintento, ese tropiezo
  * momentáneo se le presenta al usuario como "no se pudo generar", justo cuando
  * puede estar enseñándoselo a un cliente.
  *
- * Cada intento solo dispone del tiempo que quede del presupuesto total, así que
- * reintentar nunca provoca que Vercel corte la función a medias.
+ * Los tres fallos —error, caída y cuelgue— se tratan igual: si queda tiempo, se
+ * vuelve a intentar. Nunca se sobrepasa el presupuesto total, así que reintentar
+ * jamás provoca que Vercel corte la función a medias.
  */
 export async function llamarAGemini(
   apiKey: string,
@@ -45,27 +56,38 @@ export async function llamarAGemini(
 ): Promise<Response> {
   const cuerpo = JSON.stringify({ contents: [{ parts: partes }], generationConfig });
   const empezoEn = Date.now();
+  const restante = () => LIMITE_TOTAL_MS - (Date.now() - empezoEn);
   let ultima: Response | null = null;
 
   for (let intento = 1; ; intento++) {
-    const restante = LIMITE_TOTAL_MS - (Date.now() - empezoEn);
-    if (restante <= 0) break;
+    const margen = restante();
+    if (margen <= 0) break;
 
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: cuerpo,
-        signal: AbortSignal.timeout(restante),
-      }
-    );
+    let r: Response;
+    try {
+      r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: cuerpo,
+          signal: AbortSignal.timeout(Math.min(margen, LIMITE_POR_INTENTO_MS)),
+        }
+      );
+    } catch (e: any) {
+      // Cuelgue o corte de red. Se reintenta como cualquier otro fallo pasajero;
+      // si ya no queda tiempo, se propaga y la ruta avisa de que tardó demasiado.
+      const esCuelgue = e?.name === "TimeoutError" || e?.name === "AbortError";
+      if (!esCuelgue || restante() < MINIMO_PARA_REINTENTAR_MS) throw e;
+      console.warn(`Gemini no respondió a tiempo; reintento ${intento}`);
+      continue;
+    }
+
     if (r.ok) return r;
     ultima = r;
 
     const esPasajero = r.status === 429 || r.status >= 500;
-    const quedaTiempo = LIMITE_TOTAL_MS - (Date.now() - empezoEn) > MINIMO_PARA_REINTENTAR_MS;
-    if (!esPasajero || !quedaTiempo) return r;
+    if (!esPasajero || restante() < MINIMO_PARA_REINTENTAR_MS) return r;
 
     console.warn(`Gemini respondió ${r.status}; reintento ${intento}`);
     await new Promise((res) => setTimeout(res, 1500));

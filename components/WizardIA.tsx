@@ -160,10 +160,19 @@ export default function WizardIA({
       setPlano(d);
       // Se rellenan los campos del formulario con lo leído, pero quedan editables:
       // el usuario tiene la última palabra sobre las cifras que va a presupuestar.
-      const total = d.superficieUtil || d.superficieConstruida;
+      //
+      // La suma de estancias es el último recurso a propósito: un plano de una
+      // sola estancia (el caso típico de una reforma de baño) no trae superficie
+      // útil de la vivienda, y sin este apaño el campo de m² se quedaba vacío
+      // aunque el plano sí dijera "7,1 m²".
+      const sumaEstancias = (d.estancias || []).reduce(
+        (s: number, e: EstanciaPlano) => s + (e.m2 || 0),
+        0
+      );
+      const total = d.superficieUtil || d.superficieConstruida || sumaEstancias;
       setF((prev) => ({
         ...prev,
-        m2: total ? String(total) : prev.m2,
+        m2: total ? String(Number(total.toFixed(2))) : prev.m2,
         estancias: d.estancias.length
           ? d.estancias.map((e: EstanciaPlano) => e.nombre).join(", ")
           : prev.estancias,
