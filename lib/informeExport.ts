@@ -38,17 +38,43 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
   const { apartados, partidas, dictamen } = inf.contenido;
   const total = pem(partidas);
 
+  /**
+   * Índice con números de página.
+   *
+   * Es un campo TOC de Word de verdad, no una lista escrita a mano: los números
+   * de página no se pueden saber al generar el HTML porque dependen de cómo
+   * pagine Word. El texto que va dentro es lo que se ve hasta que el usuario
+   * actualiza el campo (clic derecho → Actualizar campos, o F9), momento en que
+   * Word rellena las páginas reales.
+   */
+  const indice = `
+  <h2 style="font-size:15px;margin:0 0 6px;border-bottom:1px solid #999;padding-bottom:3px;mso-outline-level:1">ÍNDICE</h2>
+  <p style="font-size:11px;color:#555;margin:0 0 8px">
+    Para los números de página: clic derecho sobre el índice y "Actualizar campos".
+  </p>
+  <p style="margin:0">
+    <span style="mso-element:field-begin"></span> TOC \\o "1-2" \\h \\z \\u <span style="mso-element:field-separator"></span>
+  </p>
+  ${apartados
+    .map((a) => `<p style="margin:0 0 3px">${esc(a.numero)}. ${esc(a.titulo)}</p>`)
+    .join("")}
+  <p style="margin:0 0 3px">PRESUPUESTO DE REPARACIÓN</p>
+  ${dictamen ? `<p style="margin:0 0 3px">DICTAMEN</p>` : ""}
+  ${inf.fotos.length ? `<p style="margin:0 0 3px">ANEXO FOTOGRÁFICO</p>` : ""}
+  <p style="margin:0"><span style="mso-element:field-end"></span></p>
+  <br style="mso-special-character:line-break;page-break-before:always" />`;
+
   const cuerpo = apartados
     .map((a) => {
       const subs = (a.subapartados || [])
         .map(
           (s, i) => `
-      <h3 style="font-size:13px;margin:12px 0 4px">${esc(a.numero)}.${i + 1}. ${esc(s.titulo)}</h3>
+      <h3 style="font-size:13px;margin:12px 0 4px;mso-outline-level:2">${esc(a.numero)}.${i + 1}. ${esc(s.titulo)}</h3>
       ${parrafos(s.texto)}`
         )
         .join("");
       return `
-    <h2 style="font-size:15px;margin:18px 0 6px;border-bottom:1px solid #999;padding-bottom:3px">${esc(a.numero)}. ${esc(a.titulo)}</h2>
+    <h2 style="font-size:15px;margin:18px 0 6px;border-bottom:1px solid #999;padding-bottom:3px;mso-outline-level:1">${esc(a.numero)}. ${esc(a.titulo)}</h2>
     ${parrafos(a.texto)}${subs}`;
     })
     .join("");
@@ -73,7 +99,7 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
   // texto pueda citarlas ("Imagen 3") y se puedan localizar.
   const anexoFotos = inf.fotos.length
     ? `
-    <h2 style="font-size:15px;margin:18px 0 6px;border-bottom:1px solid #999;padding-bottom:3px">ANEXO FOTOGRÁFICO</h2>
+    <h2 style="font-size:15px;margin:18px 0 6px;border-bottom:1px solid #999;padding-bottom:3px;mso-outline-level:1">ANEXO FOTOGRÁFICO</h2>
     ${inf.fotos
       .map(
         (f, i) => `
@@ -113,9 +139,11 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
     ${firmante ? `<tr><td style="border:1px solid #ccc;padding:5px"><b>Técnico</b></td><td style="border:1px solid #ccc;padding:5px">${esc(firmante)}</td></tr>` : ""}
   </table>
 
+  ${indice}
+
   ${cuerpo}
 
-  <h2 style="font-size:15px;margin:18px 0 6px;border-bottom:1px solid #999;padding-bottom:3px">PRESUPUESTO DE REPARACIÓN</h2>
+  <h2 style="font-size:15px;margin:18px 0 6px;border-bottom:1px solid #999;padding-bottom:3px;mso-outline-level:1">PRESUPUESTO DE REPARACIÓN</h2>
   <table style="width:100%;border-collapse:collapse;font-size:11px" border="1" cellspacing="0" cellpadding="4">
     <thead><tr style="background:#eee">
       <th>Cód.</th><th>Descripción de la partida</th><th>Ud.</th><th>Cantidad</th><th>Precio</th><th>Importe</th>
@@ -130,7 +158,7 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
     Presupuesto de ejecución material. No incluye gastos generales, beneficio industrial ni IVA.
   </p>
 
-  ${dictamen ? `<h2 style="font-size:15px;margin:18px 0 6px;border-bottom:1px solid #999;padding-bottom:3px">DICTAMEN</h2>${parrafos(dictamen)}` : ""}
+  ${dictamen ? `<h2 style="font-size:15px;margin:18px 0 6px;border-bottom:1px solid #999;padding-bottom:3px;mso-outline-level:1">DICTAMEN</h2>${parrafos(dictamen)}` : ""}
 
   ${anexoFotos}
 

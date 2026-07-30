@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/session";
 import { llamarAGemini, respuestaDeError, leerJson, type Parte } from "@/lib/gemini";
-import { guionDe, JURAMENTO, type TipoInforme } from "@/lib/informe";
+import { guionDe, JURAMENTO, DECLARACION_TACHAS, type TipoInforme } from "@/lib/informe";
 
 export const maxDuration = 60;
 
@@ -96,7 +96,7 @@ REGLAS DE REDACCIÓN
 - Para cada lesión: qué es, dónde está, qué la ha causado y cómo evolucionará si no se interviene.
 - Gradúa la gravedad con criterio estructural: MUY ALTO solo si hay riesgo de colapso o pérdida de capacidad portante.
 - Propón soluciones constructivas concretas y ejecutables, con su justificación técnica (por qué esa y no otra).
-${tipo === "PERICIAL" ? `- En el apartado del perito reproduce literalmente este juramento: "${JURAMENTO}"\n` : ""}- No redactes el apartado económico como texto: rellena "partidas".
+${tipo === "PERICIAL" ? `- El juramento y la declaración de tachas los añade el sistema: no los redactes ni los resumas.\n- Delimita el ALCANCE con honestidad: di expresamente qué no se ha podido comprobar (sin catas, sin acceso, sin proyecto). Un informe que no acota su alcance se vuelve en contra del perito.\n` : ""}- No redactes el apartado económico como texto: rellena "partidas".
 
 PARTIDAS: presupuesto de ejecución material de la reparación, con precios reales del mercado español actual. El precio es la unidad de obra completa (material, mano de obra y medios auxiliares). Códigos jerárquicos por capítulos: 01, 01.01, 01.02, 02, 02.01…
 
@@ -150,9 +150,14 @@ Responde SOLO con JSON válido, sin markdown:
      * sirve ante un juzgado. Insertándolo nosotros, el texto es siempre exacto.
      */
     if (tipo === "PERICIAL") {
-      const iPerito = apartados.findIndex((a: any) => /perito|juramento/i.test(a.titulo));
-      if (iPerito >= 0 && !apartados[iPerito].texto.includes("335")) {
-        apartados[iPerito].texto = `${apartados[iPerito].texto}\n\n${JURAMENTO}`.trim();
+      const iPerito = apartados.findIndex((a: any) => /perito|juramento|tacha/i.test(a.titulo));
+      if (iPerito >= 0) {
+        let t = apartados[iPerito].texto;
+        if (!t.includes("335")) t = `${t}\n\n${JURAMENTO}`;
+        // La tacha (art. 343) es lo que permite a la parte contraria recusar al
+        // perito: declararla expresamente se adelanta a esa objeción.
+        if (!t.includes("343")) t = `${t}\n\n${DECLARACION_TACHAS}`;
+        apartados[iPerito].texto = t.trim();
       }
     }
 
