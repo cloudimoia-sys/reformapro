@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/session";
-
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+import { llamarAGemini, respuestaDeError, leerJson } from "@/lib/gemini";
 
 /**
  * Una obra completa tarda ~18 s en generarse, y el límite por defecto de una
@@ -51,6 +50,39 @@ export async function POST(req: Request) {
     })
     .join("; ");
 
+  /**
+   * Superficies sacadas de un plano y **confirmadas por el usuario** en el
+   * asistente. Se marcan como verificadas en el prompt para que el modelo mida
+   * por estancia en lugar de repartir un total a ojo. Nunca llegan aquí cifras
+   * que la IA haya estimado midiendo sobre el dibujo: la ruta que lee el plano
+   * devuelve null cuando el dato no está escrito, precisamente para evitarlo.
+   */
+  const p = f.plano;
+  const hayPlano = !!(p && (p.estancias?.length || p.superficieConstruida));
+
+  const bloquePlano = hayPlano
+    ? `
+MEDICIONES DEL PLANO (verificadas por el usuario — son datos firmes, NO los cambies):
+${(p.estancias || []).map((e: { nombre: string; m2: number }) => `- ${e.nombre}: ${e.m2} m²`).join("\n") || "- (sin desglose por estancia)"}
+${p.superficieConstruida ? `- Superficie construida: ${p.superficieConstruida} m²` : ""}
+${p.plantas ? `- Plantas: ${p.plantas}` : ""}
+${p.estructura ? `- Estructura: ${p.estructura}` : ""}
+${p.notas ? `- Notas del plano: ${p.notas}` : ""}`
+    : "";
+
+  /**
+   * La orden de medir por estancia va en las REGLAS, no junto a los datos.
+   *
+   * Medido: poniéndola arriba, el modelo la ignoraba y presupuestaba con totales
+   * redondos — quedaba sepultada bajo los 17 capítulos y la regla genérica de
+   * "mediciones coherentes con la superficie indicada", que es la que ganaba.
+   * Al final del prompt y en imperativo, sí desglosa por estancia.
+   */
+  const reglaPlano = hayPlano
+    ? `- PRIORITARIO: mide cada partida sobre las MEDICIONES DEL PLANO, estancia por estancia, y usa esas cifras exactas como cantidad (28,4 m² se presupuesta como 28,4, no como 28 ni como 30). Cuando una partida afecte a varias estancias, suma solo las afectadas y detalla la suma en la descripción. Para paramentos verticales (alicatados, pintura, tabiquería) calcula la superficie a partir de los m² de suelo de esa estancia con altura libre de 2,50 m salvo que se indique otra, y explica el cálculo en la descripción. Esta regla manda sobre cualquier estimación por superficie total.
+`
+    : "";
+
   const prompt = `Eres un jefe de obra español experto en mediciones y presupuestos, y trabajas con la estructura de capítulos de los bancos de precios españoles (Generador de Precios de CYPE, IVE, BCCA). Cubres CUALQUIER trabajo de construcción: desde cambiar un plato de ducha hasta obra nueva, rehabilitación estructural, cubiertas, naves industriales o urbanización.
 
 Datos del trabajo:
@@ -59,6 +91,7 @@ Datos del trabajo:
 - Calidad de materiales: ${f.calidad}
 - Zonas o estancias afectadas: ${f.estancias || "no indicadas"}
 - Detalles adicionales: ${f.detalles || "ninguno"}
+${bloquePlano}
 
 Precios del catálogo propio de la empresa (úsalos cuando encajen, tienen prioridad sobre tu estimación): ${catalogo || "(vacío)"}
 
@@ -82,7 +115,7 @@ CAPÍTULOS DISPONIBLES — usa solo los que apliquen. Los números son solo para
 17. Control de calidad — ensayos; inclúyelo cuando haya estructura o cimentación.
 
 REGLAS:
-- No dejes fuera ningún trabajo necesario para ejecutar y rematar la obra, aunque no lo mencionen los detalles. Si para sustituir una viga hay que apear antes, incluye el apeo. Si hay estructura, incluye control de calidad. En toda obra, seguridad y salud.
+${reglaPlano}- No dejes fuera ningún trabajo necesario para ejecutar y rematar la obra, aunque no lo mencionen los detalles. Si para sustituir una viga hay que apear antes, incluye el apeo. Si hay estructura, incluye control de calidad. En toda obra, seguridad y salud.
 - El concepto es el nombre de la unidad de obra. La descripción es técnica y de una línea (material, formato, colocación; incluye mano de obra, medios auxiliares y parte proporcional de pequeño material).
 - Unidades según el trabajo: ud, m², m³, ml, kg, t, h, día, pa (partida alzada). m³ para excavaciones, rellenos y hormigones; kg o t para acero; ml para vigas, canalones y zócalos; pa para lo difícil de medir.
 - Precios unitarios realistas del mercado español actual para calidad ${String(f.calidad || "").toLowerCase()}, coherentes con los bancos de precios oficiales. El precio ES la unidad de obra completa (material + mano de obra + medios auxiliares), NO el material suelto.
@@ -93,9 +126,8 @@ Responde SOLO con JSON válido, sin markdown ni texto adicional, con este format
 {"partidas":[{"capitulo":"...","concepto":"...","descripcion":"...","cantidad":1,"unidad":"ud|m²|m³|ml|kg|t|h|día|pa","precio":0}]}
 Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Usa las que hagan falta: un baño necesita pocas, una obra nueva muchas.`;
 
-  const cuerpo = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
+  try {
+    const r = await llamarAGemini(apiKey, [{ text: prompt }], {
       // Generoso: los modelos Gemini "thinking" gastan parte del presupuesto
       // razonando antes de escribir el JSON, y una obra completa llega a 40
       // partidas. Si se queda corto, el JSON sale cortado y no se puede leer.
@@ -105,85 +137,10 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
       // perder calidad (mismos capítulos y partidas en las pruebas), y deja
       // margen de sobra frente al límite de 60 s de la función.
       thinkingConfig: { thinkingLevel: "low" },
-    },
-  });
+    });
+    if (!r.ok) return respuestaDeError(r, "generar-presupuesto");
 
-  /** Presupuesto total de la petición: la función de Vercel muere a los 60 s. */
-  const LIMITE_TOTAL_MS = 52000;
-  /** Por debajo de esto no merece la pena reintentar: no daría tiempo a terminar. */
-  const MINIMO_PARA_REINTENTAR_MS = 20000;
-
-  /**
-   * Llama a Gemini reintentando los fallos pasajeros, sin pasarse del reloj.
-   *
-   * La capa gratuita satura a ratos (429) y Google devuelve 500/503 de vez en
-   * cuando; también se ralentiza mucho bajo carga. Sin reintento, ese tropiezo
-   * momentáneo se le presenta al usuario como "no se pudo generar", justo cuando
-   * puede estar enseñándoselo a un cliente.
-   *
-   * Cada intento solo dispone del tiempo que quede del presupuesto total, así que
-   * reintentar nunca provoca que Vercel corte la función a medias.
-   */
-  async function llamarAGemini(): Promise<Response> {
-    const empezoEn = Date.now();
-    let ultima: Response | null = null;
-
-    for (let intento = 1; ; intento++) {
-      const restante = LIMITE_TOTAL_MS - (Date.now() - empezoEn);
-      if (restante <= 0) break;
-
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: cuerpo,
-          signal: AbortSignal.timeout(restante),
-        }
-      );
-      if (r.ok) return r;
-      ultima = r;
-
-      const esPasajero = r.status === 429 || r.status >= 500;
-      const quedaTiempo = LIMITE_TOTAL_MS - (Date.now() - empezoEn) > MINIMO_PARA_REINTENTAR_MS;
-      if (!esPasajero || !quedaTiempo) return r;
-
-      console.warn(`Gemini respondió ${r.status}; reintento ${intento}`);
-      await new Promise((res) => setTimeout(res, 1500));
-    }
-    return ultima!;
-  }
-
-  try {
-    const r = await llamarAGemini();
-
-    if (!r.ok) {
-      const detalle = await r.text();
-      console.error("Error de Gemini:", r.status, detalle);
-
-      // Mensajes distintos porque lo que puede hacer el usuario es distinto en
-      // cada caso: esperar, avisarte a ti, o revisar la cuenta de Google.
-      const porEstado: Record<number, string> = {
-        429: "El servicio de IA está saturado o has agotado la cuota diaria gratuita. Espera un minuto y vuelve a intentarlo.",
-        400: "La IA rechazó la petición. Prueba a acortar los detalles de la obra.",
-        403: "La clave de la IA no es válida o no tiene permiso. Revisa GEMINI_API_KEY.",
-      };
-      return NextResponse.json(
-        {
-          error:
-            porEstado[r.status] ||
-            (r.status >= 500
-              ? "El servicio de IA está caído ahora mismo. Inténtalo en unos minutos."
-              : "El proveedor de IA no respondió correctamente."),
-        },
-        { status: 502 }
-      );
-    }
-
-    const data = await r.json();
-    const text = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("\n") || "";
-    const clean = text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(clean);
+    const parsed = leerJson(await r.json());
 
     // Aunque el prompt lo pide, el modelo a veces devuelve "5. Estructuras" con el
     // número de orden delante. Se quita aquí para que el presupuesto que ve el
