@@ -159,15 +159,14 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
     if (!lineas.length) throw new Error("sin partidas");
 
     return NextResponse.json({ lineas });
-  } catch (e) {
+  } catch (e: any) {
     console.error("Error generando presupuesto con IA:", e);
 
     // El mensaje no culpa al usuario de escribir de más: llegar aquí significa
     // que Gemini no contestó ni al reintento, y eso pasa igual con un baño de
     // cuatro líneas que con una obra entera. Pedirle "descríbelo más concreto"
     // le hacía perder el tiempo reescribiendo algo que no era el problema.
-    const seAgotoElTiempo =
-      e?.name === "TimeoutError" || e?.name === "AbortError" || e instanceof DOMException;
+    const seAgotoElTiempo = e?.name === "TimeoutError" || e?.name === "AbortError";
     return NextResponse.json(
       {
         error: seAgotoElTiempo
