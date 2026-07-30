@@ -31,13 +31,15 @@ type ClienteConCounter = {
  * el registro: si la creación falla, el incremento se revierte y no queda un hueco
  * en la numeración. En facturas eso no es un detalle, lo exige Hacienda.
  */
+const PREFIJOS = { presupuesto: "PRE", factura: "FAC", informe: "INF" } as const;
+
 export async function siguienteNumero(
   empresaId: string,
-  tipo: "presupuesto" | "factura",
+  tipo: keyof typeof PREFIJOS,
   tx: ClienteConCounter = prismaUnsafe
 ): Promise<string> {
   const anio = new Date().getFullYear();
-  const prefijo = tipo === "presupuesto" ? "PRE" : "FAC";
+  const prefijo = PREFIJOS[tipo];
 
   const counter = await tx.counter.upsert({
     where: { empresaId_tipo_anio: { empresaId, tipo, anio } },

@@ -23,6 +23,8 @@ const MODELOS_TENANT = new Set([
   "Presupuesto",
   "LineaPresupuesto",
   "Factura",
+  "Informe",
+  "InformeFoto",
 ]);
 
 /** Operaciones que aceptan un `where` normal: se les añade el filtro de empresa. */

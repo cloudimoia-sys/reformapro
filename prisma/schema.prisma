@@ -33,6 +33,20 @@ enum EstadoFactura {
   PAGADA
 }
 
+/// Los dos informes tienen estructura distinta y no son intercambiables:
+/// PATOLOGIAS es el informe técnico que entrega el reformista a su cliente, y
+/// PERICIAL es el dictamen judicial, que lleva juramento del art. 335 LEC,
+/// intervinientes, metodología y anexo de cálculo.
+enum TipoInforme {
+  PATOLOGIAS
+  PERICIAL
+}
+
+enum EstadoInforme {
+  BORRADOR
+  FINALIZADO
+}
+
 enum PlanSuscripcion {
   PRUEBA
   BASICO
@@ -71,6 +85,8 @@ model Empresa {
   lineas       LineaPresupuesto[]
   facturas     Factura[]
   counters     Counter[]
+  informes     Informe[]
+  informeFotos InformeFoto[]
 }
 
 model Usuario {
@@ -104,6 +120,7 @@ model Cliente {
   createdAt    DateTime      @default(now())
   presupuestos Presupuesto[]
   facturas     Factura[]
+  informes     Informe[]
 
   /// Necesario para que las claves foráneas compuestas de abajo puedan apuntar al par
   /// (id, empresaId) y así Postgres impida referenciar un cliente de otra empresa.
@@ -211,6 +228,70 @@ model Factura {
   @@index([empresaId])
   @@index([presupuestoId, empresaId])
   @@index([clienteId, empresaId])
+}
+
+/// Informe técnico o pericial sobre un inmueble.
+///
+/// Los apartados van en `contenido` como JSON en vez de en columnas: cada tipo de
+/// informe tiene los suyos (el pericial lleva juramento, intervinientes y anexo de
+/// cálculo; el de patologías no), y la lista crecerá conforme aparezcan modelos
+/// nuevos. Con columnas fijas cada variante obligaría a una migración.
+model Informe {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  /// Correlativo por empresa: INF-2026-001.
+  numero    String
+  clienteId String?
+  /// NoAction como en Presupuesto: en una FK compuesta, SET NULL anularía también
+  /// empresaId, que es NOT NULL.
+  cliente   Cliente? @relation(fields: [clienteId, empresaId], references: [id, empresaId], onDelete: NoAction, onUpdate: NoAction)
+
+  tipo    TipoInforme
+  titulo  String
+  /// Dirección del inmueble objeto del informe.
+  inmueble       String        @default("")
+  refCatastral   String?
+  /// Quien encarga el informe: puede no ser el cliente (una aseguradora, un juzgado).
+  solicitante    String?
+  /// Datos del técnico que firma. En un pericial judicial son obligatorios.
+  perito         String?
+  titulacion     String?
+  colegiado      String?
+
+  fecha     DateTime      @default(now())
+  estado    EstadoInforme @default(BORRADOR)
+  /// Apartados del informe tal y como los devolvió la IA y los editó el usuario.
+  contenido Json
+  autor     String?
+  createdAt DateTime      @default(now())
+  fotos     InformeFoto[]
+
+  @@unique([empresaId, numero])
+  @@unique([id, empresaId])
+  @@index([empresaId])
+  @@index([clienteId, empresaId])
+}
+
+/// Foto de la inspección, guardada como data URL redimensionada en el navegador.
+///
+/// Va en la base de datos, igual que el logo de empresa, porque el plan gratuito
+/// no incluye almacenamiento de archivos. El cliente las reduce antes de subirlas
+/// para que un informe con diez fotos no ocupe decenas de megas.
+model InformeFoto {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  informeId String
+  informe   Informe @relation(fields: [informeId, empresaId], references: [id, empresaId], onDelete: Cascade)
+
+  datos String
+  /// Pie de foto: qué se ve y dónde. Es lo que la convierte en prueba.
+  pie   String @default("")
+  orden Int    @default(0)
+
+  @@index([empresaId])
+  @@index([informeId, empresaId])
 }
 
 /// Contador atómico para numerar presupuestos/facturas, uno por empresa y año.

@@ -91,8 +91,22 @@ async function crearEmpresaDePrueba(sufijo: string) {
   const factura = await prisma.factura.create({
     data: { empresaId, numero: "FAC-2099-001", presupuestoId: presupuesto.id, clienteId: cliente.id, base: 100, iva: 10, total: 110 },
   });
+  const informe = await prisma.informe.create({
+    data: {
+      empresaId,
+      numero: "INF-2099-001",
+      tipo: "PERICIAL",
+      titulo: `Dictamen reservado ${sufijo}`,
+      inmueble: `Calle Secreta ${sufijo}`,
+      clienteId: cliente.id,
+      contenido: { apartados: [], partidas: [], dictamen: `Conclusión confidencial ${sufijo}` },
+    },
+  });
+  const foto = await prisma.informeFoto.create({
+    data: { empresaId, informeId: informe.id, datos: "data:image/png;base64,xx", pie: `Prueba ${sufijo}` },
+  });
 
-  return { empresaId, usuario, cliente, proveedor, producto, presupuesto, linea, factura };
+  return { empresaId, usuario, cliente, proveedor, producto, presupuesto, linea, factura, informe, foto };
 }
 
 async function limpiar() {
@@ -122,6 +136,8 @@ async function main() {
     ["lineas", () => db.lineaPresupuesto.findMany()],
     ["facturas", () => db.factura.findMany()],
     ["usuarios", () => db.usuario.findMany()],
+    ["informes", () => db.informe.findMany()],
+    ["fotos de informe", () => db.informeFoto.findMany()],
   ] as const) {
     const filas = (await fn()) as { empresaId: string }[];
     const ajenas = filas.filter((r) => r.empresaId !== A.empresaId);
@@ -136,6 +152,8 @@ async function main() {
   await noDebeVer("leer factura de B", () => db.factura.findFirst({ where: { id: B.factura.id } }));
   await noDebeVer("leer usuario de B", () => db.usuario.findFirst({ where: { id: B.usuario.id } }));
   await noDebeVer("leer empresa B", () => db.empresa.findFirst({ where: { id: B.empresaId } }));
+  await noDebeVer("leer informe pericial de B", () => db.informe.findFirst({ where: { id: B.informe.id } }));
+  await noDebeVer("leer foto del informe de B", () => db.informeFoto.findFirst({ where: { id: B.foto.id } }));
 
   console.log("\n3) Con los ids de B, la empresa A no puede modificar ni borrar");
   await noDebeVer("cambiar contraseña del admin de B", () =>
@@ -166,6 +184,14 @@ async function main() {
   await noDebeVer("editar datos de la empresa B", () =>
     db.empresa.update({ where: { id: B.empresaId }, data: { nombre: "tomado" } })
   );
+  await noDebeVer("editar informe pericial de B", () =>
+    db.informe.updateMany({ where: { id: B.informe.id }, data: { titulo: "tomado" } })
+  );
+  await noDebeVer("borrar informe de B", () => db.informe.deleteMany({ where: { id: B.informe.id } }));
+  await noDebeVer("cambiar el pie de la foto de B", () =>
+    db.informeFoto.updateMany({ where: { id: B.foto.id }, data: { pie: "tomado" } })
+  );
+  await noDebeVer("borrar foto del informe de B", () => db.informeFoto.deleteMany({ where: { id: B.foto.id } }));
 
   console.log("\n4) Las operaciones inseguras estan prohibidas");
   await debeLanzar("cliente.findUnique", () => db.cliente.findUnique({ where: { id: B.cliente.id } }));
