@@ -11,6 +11,22 @@ import { base as calcBase } from "@/lib/presupuesto";
 const BLOQUEADO_ESTADOS = ["APROBADO", "FACTURADO"];
 
 /**
+ * Reduce un nombre comercial a un concepto manejable para la tabla del
+ * presupuesto: "CEMENTO TUDSELA VEGUIN II A-V 42.5R 25 KG GRIS" → "CEMENTO
+ * TUDSELA VEGUIN II".
+ *
+ * Corta por palabras enteras, nunca a mitad, y respeta las mayúsculas y la
+ * notación técnica tal y como las escribió el usuario en su catálogo: tocarlas
+ * estropearía referencias como "CEM II/A-V 42,5R". El nombre completo no se
+ * pierde, va en la descripción de la línea.
+ */
+function conceptoCorto(nombre: string, maxPalabras = 4) {
+  const palabras = nombre.trim().split(/\s+/);
+  if (palabras.length <= maxPalabras) return nombre.trim();
+  return palabras.slice(0, maxPalabras).join(" ");
+}
+
+/**
  * Carga el presupuesto comprobando de paso que es de esta empresa (el `db` ya
  * filtra) y que se puede editar. Devuelve la fila para no volver a consultarla.
  */
@@ -205,8 +221,12 @@ export async function agregarMaterialDelCatalogo(presupuestoId: string, producto
         empresaId,
         presupuestoId,
         capitulo: "Materiales",
-        concepto: producto.nombre,
-        descripcion: `Material · ${producto.proveedor.nombre}`,
+        concepto: conceptoCorto(producto.nombre),
+        // El nombre comercial completo va aquí, que es donde el cliente espera
+        // encontrar el detalle. Antes ponía "Material · Proveedor", que no decía
+        // nada, y el nombre largo ocupaba el concepto: justo al revés que las
+        // demás partidas, donde el concepto es corto y el detalle va debajo.
+        descripcion: `Suministro de ${producto.nombre}. Proveedor: ${producto.proveedor.nombre}.`,
         cantidad: 1,
         unidad: producto.unidad,
         precio: producto.precio,
