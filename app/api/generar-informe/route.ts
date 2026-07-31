@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/session";
 import { llamarAGemini, respuestaDeError, leerJson, extraerLista, type Parte } from "@/lib/gemini";
 import { guionDe, JURAMENTO, DECLARACION_TACHAS, type TipoInforme } from "@/lib/informe";
+import { textoSospechoso } from "@/lib/revision";
 
 export const maxDuration = 60;
 
@@ -98,7 +99,7 @@ REGLAS DE REDACCIÓN
 - Propón soluciones constructivas concretas y ejecutables, con su justificación técnica (por qué esa y no otra).
 ${tipo === "PERICIAL" ? `- El juramento y la declaración de tachas los añade el sistema: no los redactes ni los resumas.\n- Delimita el ALCANCE con honestidad: di expresamente qué no se ha podido comprobar (sin catas, sin acceso, sin proyecto). Un informe que no acota su alcance se vuelve en contra del perito.\n` : ""}- No redactes el apartado económico como texto: rellena "partidas".
 
-PARTIDAS: presupuesto de ejecución material de la reparación, con precios reales del mercado español actual. El precio es la unidad de obra completa (material, mano de obra y medios auxiliares). Códigos jerárquicos por capítulos: 01, 01.01, 01.02, 02, 02.01…
+PARTIDAS: presupuesto de ejecución material de la reparación, con precios reales del mercado español actual. Incluye SIEMPRE seguridad y salud y gestión de residuos: son obligatorias en cualquier obra y su ausencia deja el presupuesto corto. Escribe todo en español, sin una sola palabra ni carácter de otro idioma. El precio es la unidad de obra completa (material, mano de obra y medios auxiliares). Códigos jerárquicos por capítulos: 01, 01.01, 01.02, 02, 02.01…
 
 Responde SOLO con JSON válido, sin markdown:
 {
@@ -183,10 +184,48 @@ Responde SOLO con JSON válido, sin markdown:
       }))
       .filter((p: any) => p.descripcion);
 
+    const dictamen = String(parsed.dictamen || "").trim();
+
+    /**
+     * Avisos de calidad sobre el documento generado.
+     *
+     * Salen de un informe real entregado a un cliente: llevaba caracteres chinos
+     * en una partida ("tablones de repart荷重"), no incluía seguridad y salud pese
+     * a presupuestar un apuntalamiento de forjado, y calificaba el riesgo de MUY
+     * ALTO sin una sola fotografía que lo respaldara.
+     */
+    const avisos: string[] = [];
+
+    avisos.push(
+      ...textoSospechoso([
+        ...apartados.map((a: any) => ({ donde: `Apartado ${a.numero}`, texto: `${a.titulo} ${a.texto}` })),
+        ...partidas.map((p: any) => ({ donde: `Partida ${p.codigo || p.descripcion.slice(0, 20)}`, texto: p.descripcion })),
+        { donde: "Dictamen", texto: dictamen },
+      ])
+    );
+
+    const textoPartidas = JSON.stringify(partidas).toLowerCase();
+    if (partidas.length && !/seguridad|salud|epi/.test(textoPartidas)) {
+      avisos.push("El presupuesto no incluye seguridad y salud, que es obligatoria en toda obra.");
+    }
+    if (partidas.length && !/residuo|escombro|vertedero|contenedor/.test(textoPartidas)) {
+      avisos.push("El presupuesto no incluye gestión de residuos.");
+    }
+
+    // Un informe que califica el riesgo de alto y no aporta una sola foto se
+    // sostiene mucho peor, sobre todo si acaba discutiéndose.
+    const gravedadAlta = /MUY ALTO|GRAVEDAD: ALTO/i.test(JSON.stringify(apartados) + dictamen);
+    if (gravedadAlta && !imagenes.length) {
+      avisos.push(
+        "El informe califica el riesgo de alto y no lleva ninguna fotografía. Sube fotos de las lesiones: son la prueba de lo que afirmas."
+      );
+    }
+
     return NextResponse.json({
       titulo: String(parsed.titulo || "").trim() || "Informe técnico",
-      contenido: { apartados, partidas, dictamen: String(parsed.dictamen || "").trim() },
+      contenido: { apartados, partidas, dictamen },
       vacios,
+      avisos,
     });
   } catch (e: any) {
     console.error("Error generando informe con IA:", e);

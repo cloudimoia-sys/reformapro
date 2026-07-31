@@ -34,34 +34,43 @@ function parrafos(texto: string) {
     .join("");
 }
 
-function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
+/**
+ * @param paraWord El campo de índice de Word solo se pone al exportar a Word.
+ *   En PDF (que se genera imprimiendo desde el navegador) ese campo no existe y
+ *   se imprimía tal cual: el informe entregado salía con `TOC \\o "1-2" \\h \\z \\u`
+ *   escrito en medio de la página. Pasó en un informe real.
+ */
+function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc, paraWord: boolean) {
   const { apartados, partidas, dictamen } = inf.contenido;
   const total = pem(partidas);
 
+  const entradas = [
+    ...apartados.map((a) => `${esc(a.numero)}. ${esc(a.titulo)}`),
+    "PRESUPUESTO DE REPARACIÓN",
+    ...(dictamen ? ["DICTAMEN"] : []),
+    ...(inf.fotos.length ? ["ANEXO FOTOGRÁFICO"] : []),
+  ];
+  const lista = entradas.map((t) => `<p style="margin:0 0 3px">${t}</p>`).join("");
+
   /**
-   * Índice con números de página.
-   *
-   * Es un campo TOC de Word de verdad, no una lista escrita a mano: los números
-   * de página no se pueden saber al generar el HTML porque dependen de cómo
-   * pagine Word. El texto que va dentro es lo que se ve hasta que el usuario
-   * actualiza el campo (clic derecho → Actualizar campos, o F9), momento en que
-   * Word rellena las páginas reales.
+   * En Word va un campo TOC de verdad, porque los números de página dependen de
+   * cómo pagine Word y no se pueden saber al generar el HTML. En PDF va la lista
+   * a secas: sin número de página, pero legible y sin códigos a la vista.
    */
   const indice = `
   <h2 style="font-size:15px;margin:0 0 6px;border-bottom:1px solid #999;padding-bottom:3px;mso-outline-level:1">ÍNDICE</h2>
-  <p style="font-size:11px;color:#555;margin:0 0 8px">
+  ${
+    paraWord
+      ? `<p style="font-size:11px;color:#555;margin:0 0 8px">
     Para los números de página: clic derecho sobre el índice y "Actualizar campos".
   </p>
   <p style="margin:0">
     <span style="mso-element:field-begin"></span> TOC \\o "1-2" \\h \\z \\u <span style="mso-element:field-separator"></span>
   </p>
-  ${apartados
-    .map((a) => `<p style="margin:0 0 3px">${esc(a.numero)}. ${esc(a.titulo)}</p>`)
-    .join("")}
-  <p style="margin:0 0 3px">PRESUPUESTO DE REPARACIÓN</p>
-  ${dictamen ? `<p style="margin:0 0 3px">DICTAMEN</p>` : ""}
-  ${inf.fotos.length ? `<p style="margin:0 0 3px">ANEXO FOTOGRÁFICO</p>` : ""}
-  <p style="margin:0"><span style="mso-element:field-end"></span></p>
+  ${lista}
+  <p style="margin:0"><span style="mso-element:field-end"></span></p>`
+      : lista
+  }
   <br style="mso-special-character:line-break;page-break-before:always" />`;
 
   const cuerpo = apartados
@@ -171,7 +180,7 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
 }
 
 export function exportInformeWord(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
-  const blob = new Blob(["﻿" + docHTML(inf, cliente, empresa)], { type: "application/msword" });
+  const blob = new Blob(["﻿" + docHTML(inf, cliente, empresa, true)], { type: "application/msword" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `${inf.numero}.doc`;
@@ -182,7 +191,7 @@ export function exportInformeWord(inf: InformeDoc, cliente: ClienteDoc, empresa:
 export function exportInformePDF(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
   const w = window.open("", "_blank");
   if (!w) return;
-  w.document.write(docHTML(inf, cliente, empresa));
+  w.document.write(docHTML(inf, cliente, empresa, false));
   w.document.close();
   setTimeout(() => w.print(), 400);
 }

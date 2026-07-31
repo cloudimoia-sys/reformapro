@@ -71,6 +71,9 @@ export default function AsistenteInforme({
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState("");
+  const [revisar, setRevisar] = useState<string[]>([]);
+  /** Informe generado a la espera de que el usuario decida, tras un aviso. */
+  const [pendiente, setPendiente] = useState<{ datos: DatosInforme; contenido: ContenidoInforme } | null>(null);
 
   const anadirImagenes = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -107,6 +110,8 @@ export default function AsistenteInforme({
     setCargando(true);
     setError("");
     setAviso("");
+    setRevisar([]);
+    setPendiente(null);
     try {
       const r = await fetch("/api/generar-informe", {
         method: "POST",
@@ -137,21 +142,30 @@ export default function AsistenteInforme({
         setAviso(`La IA dejó sin redactar: ${d.vacios.join("; ")}. Complétalo en el editor antes de entregarlo.`);
       }
 
-      await onDone(
-        {
-          tipo,
-          titulo: d.titulo,
-          inmueble,
-          refCatastral,
-          solicitante,
-          perito,
-          titulacion,
-          colegiado,
-          clienteId: clienteId || null,
-        },
-        d.contenido as ContenidoInforme,
-        imagenes.map((im) => ({ datos: im.datos, pie: im.pie }))
-      );
+      const datos: DatosInforme = {
+        tipo,
+        titulo: d.titulo,
+        inmueble,
+        refCatastral,
+        solicitante,
+        perito,
+        titulacion,
+        colegiado,
+        clienteId: clienteId || null,
+      };
+
+      // Avisos de calidad (texto en otro idioma, partidas obligatorias que
+      // faltan, informe grave sin fotos). Se PARA aquí: si se creara el informe y
+      // se redirigiera al editor, el aviso se perdería de vista y el documento
+      // saldría con el fallo, que es justo lo que pasó con un informe real.
+      if (d.avisos?.length) {
+        setRevisar(d.avisos);
+        setPendiente({ datos, contenido: d.contenido as ContenidoInforme });
+        setCargando(false);
+        return;
+      }
+
+      await onDone(datos, d.contenido as ContenidoInforme, imagenes.map((im) => ({ datos: im.datos, pie: im.pie })));
     } catch (e: any) {
       if (e?.digest?.startsWith?.("NEXT_REDIRECT")) throw e;
       setError(e?.message || "No se pudo generar el informe.");
@@ -269,6 +283,36 @@ export default function AsistenteInforme({
           ))}
         </div>
 
+        {revisar.length > 0 && (
+          <div style={{ border: "1px solid var(--amber)", background: "#FFFBF0", borderRadius: 8, padding: 12, marginBottom: 10 }}>
+            <strong style={{ fontSize: 14 }}>Revisa esto antes de entregar el informe</strong>
+            <ul style={{ margin: "6px 0 0 18px", fontSize: 13 }}>
+              {revisar.map((a, i) => <li key={i}>{a}</li>)}
+            </ul>
+            <div className="row" style={{ marginTop: 10 }}>
+              <button
+                className="btn sm"
+                disabled={cargando}
+                onClick={async () => {
+                  if (!pendiente) return;
+                  setCargando(true);
+                  try {
+                    await onDone(pendiente.datos, pendiente.contenido, imagenes.map((im) => ({ datos: im.datos, pie: im.pie })));
+                  } catch (e: any) {
+                    if (e?.digest?.startsWith?.("NEXT_REDIRECT")) throw e;
+                    setError(e?.message || "No se pudo crear el informe.");
+                    setCargando(false);
+                  }
+                }}
+              >
+                Continuar y corregirlo en el editor
+              </button>
+              <button className="btn sm ghost" disabled={cargando} onClick={generar}>
+                Volver a generar
+              </button>
+            </div>
+          </div>
+        )}
         {aviso && <p className="hint" style={{ color: "var(--amber, #b45309)" }}>{aviso}</p>}
         {error && <p className="error">{error}</p>}
         <div className="row">
