@@ -140,6 +140,9 @@ export default function WizardIA({
   const [error, setError] = useState("");
   const [sinMateriales, setSinMateriales] = useState(false);
   const [aviso, setAviso] = useState("");
+  const [revisar, setRevisar] = useState<string[]>([]);
+  /** Partidas generadas a la espera de que el usuario decida, tras un aviso. */
+  const [pendientes, setPendientes] = useState<LineaIA[] | null>(null);
   const [plano, setPlano] = useState<Plano | null>(null);
   const [leyendoPlano, setLeyendoPlano] = useState(false);
   const [errorPlano, setErrorPlano] = useState("");
@@ -206,6 +209,8 @@ export default function WizardIA({
     setLoading(true);
     setError("");
     setAviso("");
+    setRevisar([]);
+    setPendientes(null);
     try {
       const r = await fetch("/api/generar-presupuesto", {
         method: "POST",
@@ -242,6 +247,17 @@ export default function WizardIA({
       // entre lo que está tarifado por el usuario y lo que es una estimación.
       if (data.partidasPropiasAplicadas?.length) {
         setAviso(`Se han aplicado tus precios del catálogo en: ${data.partidasPropiasAplicadas.join(", ")}.`);
+      }
+
+      // Mediciones que no cuadran: se PARA aquí en vez de crear el presupuesto.
+      // Si se creara y luego se redirigiera, el aviso desaparecería de la pantalla
+      // y el disparate acabaría en el documento sin que nadie lo hubiera visto.
+      // El usuario decide: volver a generar o seguir y corregirlo a mano.
+      if (data.avisos?.length) {
+        setRevisar(data.avisos);
+        setPendientes(lineas);
+        setLoading(false);
+        return;
       }
 
       // Se espera a que el presupuesto quede creado ANTES de cerrar el asistente.
@@ -356,8 +372,8 @@ export default function WizardIA({
         </div>
         <div className="grid g2">
           <div className="field">
-            <label className="lbl">¿Cuántos m² aproximados?</label>
-            <input className="inp" type="number" value={f.m2} onChange={(e) => set("m2", e.target.value)} placeholder="Ej: 8 (o 120 en obra nueva)" />
+            <label className="lbl">¿Cuántos m² se van a ejecutar?</label>
+            <input className="inp" type="number" value={f.m2} onChange={(e) => set("m2", e.target.value)} placeholder="Ej: 15 de alicatado · 4 de suelo · 120 en obra nueva" />
           </div>
           <div className="field">
             <label className="lbl">¿Qué calidad de materiales?</label>
@@ -407,6 +423,36 @@ export default function WizardIA({
             placeholder="Cuanto más concreto, mejor sale. Ej: sustituir 6 viguetas de hormigón afectadas por aluminosis en el forjado del salón, con apeo previo, bovedillas cerámicas nuevas y capa de compresión; se accede por patio interior, sin sitio para grúa."
           />
         </div>
+        {revisar.length > 0 && (
+          <div style={{ border: "1px solid var(--amber)", background: "#FFFBF0", borderRadius: 8, padding: 12, marginBottom: 10 }}>
+            <strong style={{ fontSize: 14 }}>Revisa estas mediciones antes de enviarlo</strong>
+            <ul style={{ margin: "6px 0 0 18px", fontSize: 13 }}>
+              {revisar.map((a, i) => <li key={i}>{a}</li>)}
+            </ul>
+            <div className="row" style={{ marginTop: 10 }}>
+              <button
+                className="btn sm"
+                disabled={loading}
+                onClick={async () => {
+                  if (!pendientes) return;
+                  setLoading(true);
+                  try {
+                    await onDone(pendientes, { tipo: f.tipo, m2: f.m2 });
+                  } catch (e: any) {
+                    if (e?.digest?.startsWith?.("NEXT_REDIRECT")) throw e;
+                    setError(e?.message || "No se pudo crear el presupuesto.");
+                    setLoading(false);
+                  }
+                }}
+              >
+                Continuar y corregirlo a mano
+              </button>
+              <button className="btn sm ghost" disabled={loading} onClick={generar}>
+                Volver a generar
+              </button>
+            </div>
+          </div>
+        )}
         {aviso && <p className="hint" style={{ color: "var(--ok, #1c7c4a)" }}>{aviso}</p>}
         {error && <p className="error">{error}</p>}
         <div className="row">

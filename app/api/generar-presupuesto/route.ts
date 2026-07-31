@@ -3,6 +3,7 @@ import { requireTenant } from "@/lib/session";
 import { llamarAGemini, respuestaDeError, leerJson } from "@/lib/gemini";
 import { normalizarUnidad } from "@/lib/unidades";
 import { aplicarCatalogo } from "@/lib/coincidencia";
+import { revisarMediciones } from "@/lib/revision";
 
 /**
  * Una obra completa tarda ~18 s en generarse, y el límite por defecto de una
@@ -156,6 +157,9 @@ ${reglaSinMateriales}${reglaPlano}- CIÑE EL PRESUPUESTO A LO QUE PIDEN. Presupu
 - El concepto es el nombre de la unidad de obra. La descripción es técnica y de una línea (material, formato, colocación; incluye mano de obra, medios auxiliares y parte proporcional de pequeño material).
 - Unidades según el trabajo: ud, m², m³, ml, kg, t, h, día, pa (partida alzada). m³ para excavaciones, rellenos y hormigones; kg o t para acero; ml para vigas, canalones y zócalos; pa para lo difícil de medir.
 - Precios unitarios realistas del mercado español actual para calidad ${String(f.calidad || "").toLowerCase()}, coherentes con los bancos de precios oficiales. El precio ES la unidad de obra completa (material + mano de obra + medios auxiliares), NO el material suelto.
+- MANDAN LOS DETALLES SOBRE EL TIPO DE OBRA. El tipo es solo la familia del trabajo; lo que hay que hacer está en los detalles. Si el tipo dice "Baño completo" pero los detalles piden únicamente alicatar el suelo, presupuesta SOLO eso: nada de fontanería, sanitarios ni electricidad.
+- LA SUPERFICIE INDICADA ES LA MEDICIÓN DEL TRABAJO. Si piden alicatar 4 m², son 4 m² de alicatado, no la superficie de la estancia. Solo conviertes de suelo a paredes cuando el trabajo abarca la estancia entera (un baño completo, una reforma integral) y, si lo haces, escribe el cálculo en la descripción ("perímetro 8 m × 2,5 m de altura"). Nunca multipliques la medición que te han dado sin decir por qué.
+- CANTIDADES REALISTAS, Y NUNCA UNA SUPERFICIE COMO NÚMERO DE UNIDADES. Lo que se mide en "ud" lleva las unidades que de verdad hay: un plato de ducha, un inodoro, un lavabo, una mampara son 1 ud en un baño normal. Un "15 ud" de plato de ducha significa quince platos de ducha y es un disparate. Si dudas entre medir en ud o en m², elige la que corresponda al trabajo y ajusta el precio unitario a esa unidad.
 - Mediciones coherentes con la superficie indicada. Si no la dan, estima una razonable para el tipo de obra y dilo en la descripción.
 - La herramienta de uso general (radial, taladro, borriquetas) va incluida en el precio de cada partida, no como línea aparte. En "Maquinaria y medios auxiliares" solo va lo que se alquila o es específico de esta obra.
 
@@ -210,7 +214,12 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
       }))
     );
 
-    return NextResponse.json({ lineas: conCatalogo, partidasPropiasAplicadas: aplicadas });
+    // Red de seguridad: las reglas del prompt reducen los disparates de medicion,
+    // pero no los eliminan. Lo dudoso se le senala al usuario en vez de corregirlo
+    // a su espalda, porque una medicion es decision suya.
+    const avisos = revisarMediciones(conCatalogo, Number(f.m2) || undefined);
+
+    return NextResponse.json({ lineas: conCatalogo, partidasPropiasAplicadas: aplicadas, avisos });
   } catch (e: any) {
     console.error("Error generando presupuesto con IA:", e);
 
