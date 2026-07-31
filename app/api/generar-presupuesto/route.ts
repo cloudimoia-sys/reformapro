@@ -4,6 +4,8 @@ import { llamarAGemini, respuestaDeError, leerJson, extraerLista } from "@/lib/g
 import { normalizarUnidad } from "@/lib/unidades";
 import { aplicarCatalogo } from "@/lib/coincidencia";
 import { revisarMediciones } from "@/lib/revision";
+import { bloqueBaremo } from "@/lib/baremo";
+import { normalizarIndirectos } from "@/lib/indirectos";
 
 /**
  * Una obra completa tarda ~18 s en generarse, y el límite por defecto de una
@@ -130,6 +132,7 @@ ${sinMateriales ? "- ALCANCE: solo ejecución. Los materiales de acabado y equip
 ${bloquePlano}
 
 Precios del catálogo propio de la empresa (úsalos cuando encajen, tienen prioridad sobre tu estimación): ${catalogo || "(vacío)"}
+${bloqueBaremo(sinMateriales)}
 
 CAPÍTULOS DISPONIBLES — usa solo los que apliquen. Los números son solo para indicarte el orden de ejecución: NO los incluyas en el nombre del capítulo (escribe "Estructuras", nunca "5. Estructuras").
 1. Actuaciones previas — desmontajes, apeos, apuntalamientos, catas.
@@ -190,7 +193,10 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
 
     const lineas = extraerLista(parsed, "partidas").map((p: PartidaIA) => ({
       capitulo: limpiarCapitulo(p.capitulo),
-      concepto: p.concepto || "",
+      // A veces el modelo deja el concepto en blanco, sobre todo en las partidas
+      // de seguridad o residuos. Una fila sin concepto en el documento que ve el
+      // cliente es peor que una redundante: se rellena con el capítulo.
+      concepto: (p.concepto || "").trim() || limpiarCapitulo(p.capitulo),
       descripcion: p.descripcion || "",
       cantidad: Number(p.cantidad) || 1,
       // La IA escribe "m2" o "M²" según le da; sin normalizar, dos líneas iguales
@@ -214,12 +220,17 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
       }))
     );
 
+    // Los indirectos (seguridad y salud, residuos, control de calidad) se calculan
+    // como porcentaje de la obra en vez de estimarse. Es lo que hace que el mismo
+    // trabajo cueste lo mismo en dos generaciones distintas.
+    const { lineas: finales } = normalizarIndirectos(conCatalogo);
+
     // Red de seguridad: las reglas del prompt reducen los disparates de medicion,
     // pero no los eliminan. Lo dudoso se le senala al usuario en vez de corregirlo
     // a su espalda, porque una medicion es decision suya.
-    const avisos = revisarMediciones(conCatalogo, Number(f.m2) || undefined);
+    const avisos = revisarMediciones(finales, Number(f.m2) || undefined);
 
-    return NextResponse.json({ lineas: conCatalogo, partidasPropiasAplicadas: aplicadas, avisos });
+    return NextResponse.json({ lineas: finales, partidasPropiasAplicadas: aplicadas, avisos });
   } catch (e: any) {
     console.error("Error generando presupuesto con IA:", e);
 
