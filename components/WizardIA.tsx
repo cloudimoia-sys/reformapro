@@ -139,6 +139,7 @@ export default function WizardIA({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [sinMateriales, setSinMateriales] = useState(false);
+  const [aviso, setAviso] = useState("");
   const [plano, setPlano] = useState<Plano | null>(null);
   const [leyendoPlano, setLeyendoPlano] = useState(false);
   const [errorPlano, setErrorPlano] = useState("");
@@ -204,6 +205,7 @@ export default function WizardIA({
   const generar = async () => {
     setLoading(true);
     setError("");
+    setAviso("");
     try {
       const r = await fetch("/api/generar-presupuesto", {
         method: "POST",
@@ -235,6 +237,12 @@ export default function WizardIA({
       const data = await r.json();
       const lineas: LineaIA[] = data.lineas;
       if (!lineas?.length) throw new Error("La IA no devolvió ninguna partida. Vuelve a intentarlo.");
+
+      // Se dice qué partidas llevan precio propio para que se vea la diferencia
+      // entre lo que está tarifado por el usuario y lo que es una estimación.
+      if (data.partidasPropiasAplicadas?.length) {
+        setAviso(`Se han aplicado tus precios del catálogo en: ${data.partidasPropiasAplicadas.join(", ")}.`);
+      }
 
       // Se espera a que el presupuesto quede creado ANTES de cerrar el asistente.
       // Antes se cerraba primero y, si la creación fallaba, no se veía ningún
@@ -399,6 +407,7 @@ export default function WizardIA({
             placeholder="Cuanto más concreto, mejor sale. Ej: sustituir 6 viguetas de hormigón afectadas por aluminosis en el forjado del salón, con apeo previo, bovedillas cerámicas nuevas y capa de compresión; se accede por patio interior, sin sitio para grúa."
           />
         </div>
+        {aviso && <p className="hint" style={{ color: "var(--ok, #1c7c4a)" }}>{aviso}</p>}
         {error && <p className="error">{error}</p>}
         <div className="row">
           <div className="spacer" />

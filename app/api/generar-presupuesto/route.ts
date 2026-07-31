@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/session";
 import { llamarAGemini, respuestaDeError, leerJson } from "@/lib/gemini";
 import { normalizarUnidad } from "@/lib/unidades";
+import { aplicarCatalogo } from "@/lib/coincidencia";
 
 /**
  * Una obra completa tarda ~18 s en generarse, y el límite por defecto de una
@@ -55,28 +56,18 @@ export async function POST(req: Request) {
     .join("; ");
 
   /**
-   * Partidas que el reformista ya tiene tarifadas.
+   * Las partidas del catálogo NO se le pasan a la IA.
    *
-   * Es el motivo por el que existe el catálogo: si alguien tiene cerrado a cuánto
-   * cobra cambiar un plato de ducha, la IA no debe inventarse otro precio ni otra
-   * redacción. Se le pasan con su texto exacto y se le exige copiarlas tal cual.
+   * Se hacía y salió mal: enumerárselas, aunque fuera con un "úsalas si
+   * coinciden", bastaba para que las metiera en todos los presupuestos. Pedías
+   * alicatar un aseo y aparecía "sustitución de plato de ducha" solo porque
+   * estaba en el catálogo.
+   *
+   * Ahora la IA decide el contenido de la obra sin verlas, y el cruce se hace
+   * después en `aplicarCatalogo`: si un trabajo que la IA ya decidió incluir
+   * coincide con una partida tarifada, se le pone el precio y la redacción del
+   * usuario. Así el catálogo puede cambiar precios, pero no añadir trabajo.
    */
-  const bloquePartidas = partidasPropias.length
-    ? `
-
-PARTIDAS PROPIAS DE LA EMPRESA (precios ya cerrados por el usuario):
-${partidasPropias
-  .map(
-    (p) =>
-      `- CONCEPTO: "${p.nombre}" | DESCRIPCIÓN: "${p.descripcion || ""}" | ${p.precio} €/${p.unidad}${p.capitulo ? ` | CAPÍTULO: ${p.capitulo}` : ""}`
-  )
-  .join("\n")}`
-    : "";
-
-  const reglaPartidas = partidasPropias.length
-    ? `- PRIORITARIO: si un trabajo de la obra coincide con una PARTIDA PROPIA, cópiala EXACTAMENTE —mismo concepto, misma descripción, mismo precio unitario y misma unidad— y limítate a ajustar la cantidad. No la reescribas ni le cambies el precio: son las tarifas del usuario y sabe él lo que cuestan. Si no coincide ninguna, presupuesta con normalidad.
-`
-    : "";
 
   /**
    * Superficies sacadas de un plano y **confirmadas por el usuario** en el
@@ -135,7 +126,7 @@ Datos del trabajo:
 - Zonas o estancias afectadas: ${f.estancias || "no indicadas"}
 - Detalles adicionales: ${f.detalles || "ninguno"}
 ${sinMateriales ? "- ALCANCE: solo ejecución. Los materiales de acabado y equipamiento los aporta el cliente." : ""}
-${bloquePlano}${bloquePartidas}
+${bloquePlano}
 
 Precios del catálogo propio de la empresa (úsalos cuando encajen, tienen prioridad sobre tu estimación): ${catalogo || "(vacío)"}
 
@@ -159,7 +150,9 @@ CAPÍTULOS DISPONIBLES — usa solo los que apliquen. Los números son solo para
 17. Control de calidad — ensayos; inclúyelo cuando haya estructura o cimentación.
 
 REGLAS:
-${reglaSinMateriales}${reglaPartidas}${reglaPlano}- No dejes fuera ningún trabajo necesario para ejecutar y rematar la obra, aunque no lo mencionen los detalles. Si para sustituir una viga hay que apear antes, incluye el apeo. Si hay estructura, incluye control de calidad. En toda obra, seguridad y salud.
+${reglaSinMateriales}${reglaPlano}- CIÑE EL PRESUPUESTO A LO QUE PIDEN. Presupuesta el trabajo descrito y lo que sea imprescindible para ejecutarlo y rematarlo, nada más. Si piden alicatar, no añadas el solado; si piden cambiar una ventana, no toques la persiana; si piden un baño completo, ahí sí entra todo. Ampliar el alcance por tu cuenta le hace perder una obra al usuario por precio.
+- Cada trabajo, UNA sola partida. No desdobles la misma unidad de obra en dos líneas ni repitas un trabajo con otro nombre. Solado (suelo) y alicatado (paredes) son distintos y se miden aparte, pero solo van los que se hayan pedido.
+- Dentro de ese alcance, no dejes fuera ningún trabajo necesario para ejecutarlo y rematarlo, aunque no lo mencionen los detalles. Si para sustituir una viga hay que apear antes, incluye el apeo. Si hay estructura, incluye control de calidad. En toda obra, seguridad y salud.
 - El concepto es el nombre de la unidad de obra. La descripción es técnica y de una línea (material, formato, colocación; incluye mano de obra, medios auxiliares y parte proporcional de pequeño material).
 - Unidades según el trabajo: ud, m², m³, ml, kg, t, h, día, pa (partida alzada). m³ para excavaciones, rellenos y hormigones; kg o t para acero; ml para vigas, canalones y zócalos; pa para lo difícil de medir.
 - Precios unitarios realistas del mercado español actual para calidad ${String(f.calidad || "").toLowerCase()}, coherentes con los bancos de precios oficiales. El precio ES la unidad de obra completa (material + mano de obra + medios auxiliares), NO el material suelto.
@@ -204,7 +197,20 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
 
     if (!lineas.length) throw new Error("sin partidas");
 
-    return NextResponse.json({ lineas });
+    // El catálogo entra AQUÍ, sobre lo que la IA ya decidió incluir: puede
+    // cambiar el precio y la redacción de un trabajo, nunca añadir uno nuevo.
+    const { lineas: conCatalogo, aplicadas } = aplicarCatalogo(
+      lineas,
+      partidasPropias.map((p) => ({
+        nombre: p.nombre,
+        descripcion: p.descripcion,
+        capitulo: p.capitulo,
+        unidad: p.unidad,
+        precio: p.precio,
+      }))
+    );
+
+    return NextResponse.json({ lineas: conCatalogo, partidasPropiasAplicadas: aplicadas });
   } catch (e: any) {
     console.error("Error generando presupuesto con IA:", e);
 

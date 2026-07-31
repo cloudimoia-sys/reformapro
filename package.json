@@ -12,7 +12,8 @@
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "test:aislamiento": "tsx scripts/verificar-aislamiento.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test:catalogo": "tsx scripts/verificar-catalogo.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
