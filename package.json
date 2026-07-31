@@ -14,7 +14,9 @@
     "test:aislamiento": "tsx scripts/verificar-aislamiento.ts",
     "postinstall": "prisma generate",
     "test:catalogo": "tsx scripts/verificar-catalogo.ts",
-    "test:precios": "tsx scripts/verificar-precios.ts"
+    "test:precios": "tsx scripts/verificar-precios.ts",
+    "test:completitud": "tsx scripts/verificar-completitud.ts",
+    "test:presupuestos": "npm run test:catalogo && npm run test:precios && npm run test:completitud"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

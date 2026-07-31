@@ -38,6 +38,21 @@ export const BAREMO: PrecioReferencia[] = [
   { concepto: "Levantado de sanitarios", unidad: "ud", conMaterial: 30, soloMano: null },
   { concepto: "Protección de zonas de paso y mobiliario", unidad: "pa", conMaterial: 60, soloMano: null },
 
+  // Instalaciones completas de vivienda.
+  //
+  // Corregidas al alza tras una revisión técnica: la app presupuestaba 1.850 € de
+  // fontanería y 3.200 € de electricidad para una vivienda de 68 m², cuando lo
+  // normal son 3.000-5.000 € y 4.500-7.000 €. Se dan por m² construido para que
+  // escalen con la vivienda en vez de salir a tanto alzado, que es justo donde
+  // luego aparecen los "modificados".
+  { concepto: "Instalación completa de fontanería y saneamiento en vivienda", unidad: "m²", conMaterial: 58, soloMano: 44 },
+  { concepto: "Instalación eléctrica completa de vivienda según ITC-BT", unidad: "m²", conMaterial: 78, soloMano: 58 },
+  { concepto: "Calefacción y ACS con aerotermia (bomba de calor + emisores)", unidad: "m²", conMaterial: 135, soloMano: 55 },
+  { concepto: "Ventilación mecánica de doble flujo (CTE DB-HS3)", unidad: "m²", conMaterial: 34, soloMano: 18 },
+  { concepto: "Infraestructura de telecomunicaciones (ICT)", unidad: "pa", conMaterial: 1100, soloMano: 700 },
+  { concepto: "Acometidas de agua, electricidad y saneamiento", unidad: "pa", conMaterial: 3500, soloMano: null },
+  { concepto: "Estudio geotécnico", unidad: "pa", conMaterial: 1100, soloMano: null },
+
   // Fontanería y sanitarios
   { concepto: "Punto nuevo de agua (fría y caliente)", unidad: "ud", conMaterial: 110, soloMano: 85 },
   { concepto: "Sustitución de plato de ducha", unidad: "ud", conMaterial: 330, soloMano: 130 },
@@ -52,10 +67,23 @@ export const BAREMO: PrecioReferencia[] = [
 
   // Carpintería
   { concepto: "Puerta de paso block", unidad: "ud", conMaterial: 300, soloMano: 110 },
-  { concepto: "Ventana de aluminio o PVC con rotura de puente térmico", unidad: "m²", conMaterial: 330, soloMano: 90 },
+  // Vidrio 4/16/6 bajo emisivo, no 4/16/4: con el simple se queda en el límite de
+  // la transmitancia exigida y no pasa en zonas climáticas frías.
+  { concepto: "Ventana de aluminio o PVC con RPT y vidrio 4/16/6 bajo emisivo", unidad: "m²", conMaterial: 380, soloMano: 95 },
+  { concepto: "Puerta de entrada blindada", unidad: "ud", conMaterial: 1100, soloMano: 180 },
+  { concepto: "Persiana de aluminio con aislamiento", unidad: "m²", conMaterial: 110, soloMano: 40 },
+  { concepto: "Armario empotrado con interior forrado", unidad: "ml", conMaterial: 480, soloMano: 140 },
+  { concepto: "Mobiliario de cocina con encimera", unidad: "ml", conMaterial: 950, soloMano: 220 },
+
+  // Exteriores
+  { concepto: "Urbanización exterior: acceso, acera perimetral y cerramiento", unidad: "m²", conMaterial: 65, soloMano: 42 },
 
   // Albañilería y estructura
   { concepto: "Tabique de ladrillo hueco doble", unidad: "m²", conMaterial: 34, soloMano: 24 },
+  // Cerramiento completo (1/2 pie + aislamiento + trasdosado). A 55 EUR/m2 se
+  // quedaba muy corto: lo normal son 75-110 EUR/m2.
+  { concepto: "Cerramiento de fachada de 1/2 pie con aislamiento y trasdosado", unidad: "m²", conMaterial: 92, soloMano: 62 },
+  { concepto: "Revoco monocapa o revestimiento exterior con remates y vierteaguas", unidad: "m²", conMaterial: 32, soloMano: 24 },
   { concepto: "Trasdosado autoportante de placa de yeso con aislamiento", unidad: "m²", conMaterial: 42, soloMano: 30 },
   { concepto: "Apeo y apuntalamiento", unidad: "ud", conMaterial: 160, soloMano: 140 },
   { concepto: "Sustitución de vigueta", unidad: "ml", conMaterial: 130, soloMano: 95 },
