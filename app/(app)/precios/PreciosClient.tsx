@@ -126,7 +126,11 @@ export default function PreciosClient({
       <div className="card">
         <div className="row" style={{ marginBottom: 10 }}>
           <h2 style={{ fontSize: 22 }}>Catálogo de precios</h2>
-          <p className="hint">Actualiza aquí los precios de cada material; la IA los usa como referencia.</p>
+          <p className="hint">
+            Actualiza aquí los precios de cada material; la IA los usa como referencia. &quot;Comprobar precio&quot; lee la
+            ficha del proveedor, pero las grandes cadenas (Obramat, Leroy Merlin, Bricomart, Bauhaus, Brico Depot)
+            no admiten consultas automáticas: en esas hay que abrir la ficha y actualizar el precio a mano.
+          </p>
           <div className="spacer" />
           <button className="btn" disabled={!proveedores.length} onClick={abrirNuevo}>+ Añadir material</button>
         </div>
@@ -156,7 +160,19 @@ export default function PreciosClient({
                   <button className="btn sm ghost" onClick={() => abrirEditar(m)}>Editar</button>{" "}
                   {isAdmin && <button className="btn sm red" onClick={() => borrar(m.id)}>Borrar</button>}
                   {erroresComprobacion[m.id] && (
-                    <div className="error" style={{ marginTop: 4, textAlign: "right" }}>{erroresComprobacion[m.id]}</div>
+                    <div className="error" style={{ marginTop: 4, textAlign: "right" }}>
+                      {erroresComprobacion[m.id]}
+                      {/* Las grandes cadenas bloquean la consulta automática, así que
+                          el camino corto es abrir su ficha y editar el precio aquí. */}
+                      {m.url && (
+                        <>
+                          {" "}
+                          <a href={m.url} target="_blank" rel="noopener noreferrer">Abrir ficha ↗</a>
+                          {" · "}
+                          <a href="#" onClick={(e) => { e.preventDefault(); abrirEditar(m); }}>Editar precio</a>
+                        </>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>

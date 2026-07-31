@@ -92,17 +92,52 @@ function extraerPrecioDeHTML(html: string): number | null {
   return extraerPrecioDeMicrodata(html);
 }
 
+/**
+ * Códigos con los que una tienda dice "no quiero peticiones automáticas".
+ *
+ * Las grandes cadenas españolas (Obramat, Leroy Merlin, Bricomart, Bauhaus,
+ * Brico Depot) responden 403 a cualquier petición que no venga de un navegador
+ * real, por muchas cabeceras que se le pongan: está comprobado. Es una decisión
+ * suya y se respeta — no se intenta esquivar. Lo único que cambia es que el
+ * usuario reciba un motivo claro y sepa qué hacer, en vez de un número de error.
+ */
+const BLOQUEO = new Set([401, 403, 429]);
+
+export class TiendaBloquea extends Error {
+  constructor() {
+    super("Esta tienda no permite consultar el precio de forma automática. Abre su ficha y actualiza el precio a mano.");
+    this.name = "TiendaBloquea";
+  }
+}
+
 export async function comprobarPrecioUrl(url: string): Promise<number> {
-  const r = await fetch(url, {
-    signal: AbortSignal.timeout(10000),
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-    },
-  });
-  if (!r.ok) throw new Error(`La página respondió con error (${r.status}).`);
+  let r: Response;
+  try {
+    r = await fetch(url, {
+      signal: AbortSignal.timeout(10000),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-ES,es;q=0.9",
+      },
+    });
+  } catch (e: any) {
+    const lento = e?.name === "TimeoutError" || e?.name === "AbortError";
+    throw new Error(
+      lento
+        ? "La tienda tardó demasiado en responder. Inténtalo de nuevo."
+        : "No se pudo conectar con la tienda. Comprueba que la dirección sigue siendo válida."
+    );
+  }
+
+  if (BLOQUEO.has(r.status)) throw new TiendaBloquea();
+  if (r.status === 404) throw new Error("Esa página ya no existe. Puede que el producto se haya retirado.");
+  if (!r.ok) throw new Error(`La tienda respondió con un error (${r.status}).`);
 
   const html = await r.text();
   const precio = extraerPrecioDeHTML(html);
-  if (precio === null) throw new Error("No se encontró un precio reconocible en esa página.");
+  if (precio === null) {
+    throw new Error("No se encontró un precio reconocible en esa página. Actualízalo a mano.");
+  }
   return precio;
 }
