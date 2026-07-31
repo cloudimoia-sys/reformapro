@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/session";
-import { llamarAGemini, respuestaDeError, leerJson, type Parte } from "@/lib/gemini";
+import { llamarAGemini, respuestaDeError, leerJson, extraerLista, type Parte } from "@/lib/gemini";
 import { guionDe, JURAMENTO, DECLARACION_TACHAS, type TipoInforme } from "@/lib/informe";
 
 export const maxDuration = 60;
@@ -129,7 +129,7 @@ Responde SOLO con JSON válido, sin markdown:
 
     const parsed = leerJson(await r.json());
 
-    const apartados = (parsed.apartados || [])
+    const apartados = extraerLista(parsed, "apartados")
       .map((a: any) => ({
         numero: String(a.numero ?? "").trim(),
         titulo: String(a.titulo ?? "").trim(),
@@ -173,7 +173,7 @@ Responde SOLO con JSON válido, sin markdown:
       .filter((a: any) => !a.texto && !a.subapartados?.length)
       .map((a: any) => `${a.numero}. ${a.titulo}`);
 
-    const partidas = (parsed.partidas || [])
+    const partidas = extraerLista(parsed, "partidas")
       .map((p: any) => ({
         codigo: String(p.codigo ?? "").trim(),
         descripcion: String(p.descripcion ?? "").trim(),

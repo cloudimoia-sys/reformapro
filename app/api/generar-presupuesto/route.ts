@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/session";
-import { llamarAGemini, respuestaDeError, leerJson } from "@/lib/gemini";
+import { llamarAGemini, respuestaDeError, leerJson, extraerLista } from "@/lib/gemini";
 import { normalizarUnidad } from "@/lib/unidades";
 import { aplicarCatalogo } from "@/lib/coincidencia";
 import { revisarMediciones } from "@/lib/revision";
@@ -188,7 +188,7 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
     // cliente no lleve una numeración interna nuestra.
     const limpiarCapitulo = (c?: string) => (c || "Varios").replace(/^\s*\d+\s*[.)-]\s*/, "").trim() || "Varios";
 
-    const lineas = (parsed.partidas || []).map((p: PartidaIA) => ({
+    const lineas = extraerLista(parsed, "partidas").map((p: PartidaIA) => ({
       capitulo: limpiarCapitulo(p.capitulo),
       concepto: p.concepto || "",
       descripcion: p.descripcion || "",

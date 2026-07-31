@@ -127,3 +127,31 @@ export function leerJson(data: any): any {
   const texto = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("\n") || "";
   return JSON.parse(texto.replace(/```json|```/g, "").trim());
 }
+
+/**
+ * Saca una lista del JSON aunque no venga con la forma exacta que se pidió.
+ *
+ * El modelo devuelve `{"partidas":[...]}` la mayoría de las veces, pero a ratos
+ * manda el array pelado, sin envolver. Medido: 2 de cada 4 generaciones con el
+ * mismo prompt. Como el código solo miraba `parsed.partidas`, esas respuestas —que
+ * eran perfectamente válidas— se contaban como "cero partidas" y el usuario veía
+ * "No se pudo generar el presupuesto".
+ *
+ * Exigirle la forma exacta por prompt no basta: es más barato aceptar las dos.
+ */
+export function extraerLista(parsed: unknown, clave: string): any[] {
+  // El array pelado, que es la variante que de verdad devuelve el modelo.
+  if (Array.isArray(parsed)) return parsed;
+
+  if (parsed && typeof parsed === "object") {
+    const obj = parsed as Record<string, unknown>;
+    if (Array.isArray(obj[clave])) return obj[clave] as any[];
+  }
+
+  // Deliberadamente no se adivina "la primera lista que aparezca". En un informe
+  // conviven "apartados" y "partidas": si faltase la que se pide, esa heurística
+  // devolvería el presupuesto como si fueran los apartados del dictamen. Es mejor
+  // devolver vacío y que salte el aviso de "sin partidas" que colar datos
+  // equivocados en un documento que se firma.
+  return [];
+}
