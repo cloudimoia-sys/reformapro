@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/session";
 import { llamarAGemini, respuestaDeError, leerJson } from "@/lib/gemini";
+import { normalizarUnidad } from "@/lib/unidades";
 
 /**
  * Una obra completa tarda ~18 s en generarse, y el límite por defecto de una
@@ -43,12 +44,39 @@ export async function POST(req: Request) {
     db.producto.findMany(),
     db.proveedor.findMany(),
   ]);
-  const catalogo = productos
+  const materiales = productos.filter((p) => p.tipo !== "PARTIDA");
+  const partidasPropias = productos.filter((p) => p.tipo === "PARTIDA");
+
+  const catalogo = materiales
     .map((p) => {
       const prov = proveedores.find((x) => x.id === p.provId);
       return `${p.nombre} (${prov ? prov.nombre : "—"}): ${p.precio} €/${p.unidad}`;
     })
     .join("; ");
+
+  /**
+   * Partidas que el reformista ya tiene tarifadas.
+   *
+   * Es el motivo por el que existe el catálogo: si alguien tiene cerrado a cuánto
+   * cobra cambiar un plato de ducha, la IA no debe inventarse otro precio ni otra
+   * redacción. Se le pasan con su texto exacto y se le exige copiarlas tal cual.
+   */
+  const bloquePartidas = partidasPropias.length
+    ? `
+
+PARTIDAS PROPIAS DE LA EMPRESA (precios ya cerrados por el usuario):
+${partidasPropias
+  .map(
+    (p) =>
+      `- CONCEPTO: "${p.nombre}" | DESCRIPCIÓN: "${p.descripcion || ""}" | ${p.precio} €/${p.unidad}${p.capitulo ? ` | CAPÍTULO: ${p.capitulo}` : ""}`
+  )
+  .join("\n")}`
+    : "";
+
+  const reglaPartidas = partidasPropias.length
+    ? `- PRIORITARIO: si un trabajo de la obra coincide con una PARTIDA PROPIA, cópiala EXACTAMENTE —mismo concepto, misma descripción, mismo precio unitario y misma unidad— y limítate a ajustar la cantidad. No la reescribas ni le cambies el precio: son las tarifas del usuario y sabe él lo que cuestan. Si no coincide ninguna, presupuesta con normalidad.
+`
+    : "";
 
   /**
    * Superficies sacadas de un plano y **confirmadas por el usuario** en el
@@ -83,6 +111,21 @@ ${p.notas ? `- Notas del plano: ${p.notas}` : ""}`
 `
     : "";
 
+  /**
+   * Presupuesto de solo ejecución.
+   *
+   * Un reformista pide esto a menudo: el cliente compra por su cuenta sanitarios,
+   * muebles o pavimento, y quiere presupuestar únicamente el trabajo. Sin esta
+   * opción había que borrar a mano media docena de líneas cada vez.
+   */
+  const sinMateriales = !!f.sinMateriales;
+  const reglaSinMateriales = sinMateriales
+    ? `- PRIORITARIO — PRESUPUESTO DE SOLO EJECUCIÓN: el cliente aporta los materiales de acabado y equipamiento. NO incluyas ninguna partida de suministro de sanitarios, grifería, platos de ducha, mamparas, muebles, electrodomésticos, pavimentos, alicatados, azulejos, puertas ni ventanas.
+  SÍ incluyes: mano de obra de colocación y montaje, demoliciones, retirada de escombros y gestión de residuos, ayudas de albañilería, instalaciones (fontanería, electricidad), medios auxiliares, seguridad y salud, y el pequeño material de agarre imprescindible (mortero, cola, sellantes, tacos, tubería, cable).
+  En cada partida deja claro en la descripción que el material lo aporta el cliente, por ejemplo: "Colocación de plato de ducha aportado por la propiedad".
+`
+    : "";
+
   const prompt = `Eres un jefe de obra español experto en mediciones y presupuestos, y trabajas con la estructura de capítulos de los bancos de precios españoles (Generador de Precios de CYPE, IVE, BCCA). Cubres CUALQUIER trabajo de construcción: desde cambiar un plato de ducha hasta obra nueva, rehabilitación estructural, cubiertas, naves industriales o urbanización.
 
 Datos del trabajo:
@@ -91,7 +134,8 @@ Datos del trabajo:
 - Calidad de materiales: ${f.calidad}
 - Zonas o estancias afectadas: ${f.estancias || "no indicadas"}
 - Detalles adicionales: ${f.detalles || "ninguno"}
-${bloquePlano}
+${sinMateriales ? "- ALCANCE: solo ejecución. Los materiales de acabado y equipamiento los aporta el cliente." : ""}
+${bloquePlano}${bloquePartidas}
 
 Precios del catálogo propio de la empresa (úsalos cuando encajen, tienen prioridad sobre tu estimación): ${catalogo || "(vacío)"}
 
@@ -115,7 +159,7 @@ CAPÍTULOS DISPONIBLES — usa solo los que apliquen. Los números son solo para
 17. Control de calidad — ensayos; inclúyelo cuando haya estructura o cimentación.
 
 REGLAS:
-${reglaPlano}- No dejes fuera ningún trabajo necesario para ejecutar y rematar la obra, aunque no lo mencionen los detalles. Si para sustituir una viga hay que apear antes, incluye el apeo. Si hay estructura, incluye control de calidad. En toda obra, seguridad y salud.
+${reglaSinMateriales}${reglaPartidas}${reglaPlano}- No dejes fuera ningún trabajo necesario para ejecutar y rematar la obra, aunque no lo mencionen los detalles. Si para sustituir una viga hay que apear antes, incluye el apeo. Si hay estructura, incluye control de calidad. En toda obra, seguridad y salud.
 - El concepto es el nombre de la unidad de obra. La descripción es técnica y de una línea (material, formato, colocación; incluye mano de obra, medios auxiliares y parte proporcional de pequeño material).
 - Unidades según el trabajo: ud, m², m³, ml, kg, t, h, día, pa (partida alzada). m³ para excavaciones, rellenos y hormigones; kg o t para acero; ml para vigas, canalones y zócalos; pa para lo difícil de medir.
 - Precios unitarios realistas del mercado español actual para calidad ${String(f.calidad || "").toLowerCase()}, coherentes con los bancos de precios oficiales. El precio ES la unidad de obra completa (material + mano de obra + medios auxiliares), NO el material suelto.
@@ -152,7 +196,9 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
       concepto: p.concepto || "",
       descripcion: p.descripcion || "",
       cantidad: Number(p.cantidad) || 1,
-      unidad: p.unidad || "ud",
+      // La IA escribe "m2" o "M²" según le da; sin normalizar, dos líneas iguales
+      // quedarían medidas en unidades distintas y el desplegable no las reconocería.
+      unidad: normalizarUnidad(p.unidad),
       precio: Number(p.precio) || 0,
     }));
 

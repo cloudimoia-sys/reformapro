@@ -7,6 +7,7 @@ import { estadoClase, estadoLabel, importeLinea } from "@/lib/presupuesto";
 import { fallo } from "@/lib/accion";
 import { exportPDF, exportWord, exportExcel } from "@/lib/docExport";
 import SignaturePad from "@/components/SignaturePad";
+import SelectUnidad from "@/components/SelectUnidad";
 import {
   actualizarPresupuesto,
   agregarLinea,
@@ -19,7 +20,7 @@ import {
 } from "../actions";
 
 type Cliente = { id: string; nombre: string; direccion: string; nif: string; email: string };
-type Producto = { id: string; nombre: string; unidad: string; precio: number };
+type Producto = { id: string; nombre: string; unidad: string; precio: number; tipo: "MATERIAL" | "PARTIDA" };
 type Linea = {
   id: string;
   capitulo: string;
@@ -225,7 +226,7 @@ export default function PresupuestoEditor({
           </div>
         </div>
 
-        <table className="t">
+        <table className="t solo-escritorio">
           <thead>
             <tr>
               <th className="hidemob">Capítulo</th>
@@ -276,12 +277,12 @@ export default function PresupuestoEditor({
                     onBlur={(e) => { const v = Number(e.target.value); setLineaLocal(l.id, { cantidad: v }); commitLinea(l.id, { cantidad: v }); }}
                   />
                 </td>
-                <td style={{ width: 70 }}>
-                  <input
-                    className="inp"
-                    defaultValue={l.unidad}
+                <td style={{ width: 86 }}>
+                  <SelectUnidad
+                    compacto
                     disabled={bloqueado}
-                    onBlur={(e) => { setLineaLocal(l.id, { unidad: e.target.value }); commitLinea(l.id, { unidad: e.target.value }); }}
+                    value={l.unidad}
+                    onChange={(u) => { setLineaLocal(l.id, { unidad: u }); commitLinea(l.id, { unidad: u }); }}
                   />
                 </td>
                 <td style={{ width: 95 }}>
@@ -313,12 +314,123 @@ export default function PresupuestoEditor({
           </tbody>
         </table>
 
+        {/* En móvil, cada línea es una ficha: la tabla de nueve columnas no cabía
+            y la unidad quedaba en un hueco de 70 px imposible de tocar. */}
+        <div className="solo-movil">
+          {p.lineas.map((l, i) => (
+            <div key={l.id} className="linea-movil">
+              <div className="cab">
+                <span className="num">{i + 1}</span>
+                <input
+                  className="inp"
+                  defaultValue={l.concepto}
+                  disabled={bloqueado}
+                  placeholder="Concepto"
+                  onBlur={(e) => { setLineaLocal(l.id, { concepto: e.target.value }); commitLinea(l.id, { concepto: e.target.value }); }}
+                />
+              </div>
+
+              <input
+                className="inp"
+                defaultValue={l.capitulo}
+                disabled={bloqueado}
+                placeholder="Capítulo"
+                onBlur={(e) => { setLineaLocal(l.id, { capitulo: e.target.value }); commitLinea(l.id, { capitulo: e.target.value }); }}
+              />
+
+              <textarea
+                className="inp"
+                style={{ marginTop: 8 }}
+                rows={2}
+                defaultValue={l.descripcion}
+                disabled={bloqueado}
+                placeholder="Descripción"
+                onBlur={(e) => { setLineaLocal(l.id, { descripcion: e.target.value }); commitLinea(l.id, { descripcion: e.target.value }); }}
+              />
+
+              <div className="tres">
+                <div>
+                  <label className="lbl">Cant.</label>
+                  <input
+                    className="inp"
+                    type="number"
+                    inputMode="decimal"
+                    defaultValue={l.cantidad}
+                    disabled={bloqueado}
+                    onBlur={(e) => { const v = Number(e.target.value); setLineaLocal(l.id, { cantidad: v }); commitLinea(l.id, { cantidad: v }); }}
+                  />
+                </div>
+                <div>
+                  <label className="lbl">Unidad</label>
+                  <SelectUnidad
+                    compacto
+                    disabled={bloqueado}
+                    value={l.unidad}
+                    onChange={(u) => { setLineaLocal(l.id, { unidad: u }); commitLinea(l.id, { unidad: u }); }}
+                  />
+                </div>
+                <div>
+                  <label className="lbl">Precio €</label>
+                  <input
+                    className="inp"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    defaultValue={l.precio}
+                    disabled={bloqueado}
+                    onBlur={(e) => { const v = Number(e.target.value); setLineaLocal(l.id, { precio: v }); commitLinea(l.id, { precio: v }); }}
+                  />
+                </div>
+              </div>
+
+              <div className="tres" style={{ gridTemplateColumns: "1fr 2fr" }}>
+                <div>
+                  <label className="lbl">Dto. %</label>
+                  <input
+                    className="inp"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={100}
+                    defaultValue={l.descuento}
+                    disabled={bloqueado}
+                    onBlur={(e) => { const v = Number(e.target.value); setLineaLocal(l.id, { descuento: v }); commitLinea(l.id, { descuento: v }); }}
+                  />
+                </div>
+              </div>
+
+              <div className="pie">
+                <strong className="linetotal">{eur(importeLinea(l))}</strong>
+                {!bloqueado && (
+                  <button className="btn sm red" onClick={() => quitarLinea(l.id)}>Quitar línea</button>
+                )}
+              </div>
+            </div>
+          ))}
+          {!p.lineas.length && <p className="hint">Sin partidas todavía.</p>}
+        </div>
+
         {!bloqueado && (
           <div className="row" style={{ marginTop: 10 }}>
-            <button className="btn ghost sm" onClick={anadirPartida}>+ Añadir partida</button>
-            <select className="inp" style={{ width: 280 }} value="" onChange={(e) => anadirMaterial(e.target.value)}>
-              <option value="">+ Añadir material del catálogo…</option>
-              {productos.map((m) => <option key={m.id} value={m.id}>{m.nombre} ({eur(m.precio)})</option>)}
+            <button className="btn ghost sm" onClick={anadirPartida}>+ Línea en blanco</button>
+            {/* Separadas por tipo: una partida propia trae su descripción ya
+                redactada, un material solo el suministro. */}
+            <select className="inp" style={{ maxWidth: 320 }} value="" onChange={(e) => anadirMaterial(e.target.value)}>
+              <option value="">+ Añadir del catálogo…</option>
+              {productos.some((m) => m.tipo === "PARTIDA") && (
+                <optgroup label="Mis partidas">
+                  {productos.filter((m) => m.tipo === "PARTIDA").map((m) => (
+                    <option key={m.id} value={m.id}>{m.nombre} ({eur(m.precio)}/{m.unidad})</option>
+                  ))}
+                </optgroup>
+              )}
+              {productos.some((m) => m.tipo !== "PARTIDA") && (
+                <optgroup label="Materiales">
+                  {productos.filter((m) => m.tipo !== "PARTIDA").map((m) => (
+                    <option key={m.id} value={m.id}>{m.nombre} ({eur(m.precio)}/{m.unidad})</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
         )}

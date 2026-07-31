@@ -47,7 +47,7 @@ export default function EquipoClient({ usuarios, miId }: { usuarios: Usuario[]; 
         <button className="btn" onClick={abrirNuevo}>+ Añadir usuario</button>
       </div>
       <p className="hint" style={{ marginBottom: 10 }}>
-        Los empleados pueden gestionar clientes, precios y presupuestos, pero no ven facturación ni contabilidad y no
+        Los empleados pueden gestionar clientes, catálogo y presupuestos, pero no ven facturación ni contabilidad y no
         pueden borrar datos.
       </p>
       <table className="t">

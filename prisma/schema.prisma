@@ -37,6 +37,14 @@ enum EstadoFactura {
 /// PATOLOGIAS es el informe técnico que entrega el reformista a su cliente, y
 /// PERICIAL es el dictamen judicial, que lleva juramento del art. 335 LEC,
 /// intervinientes, metodología y anexo de cálculo.
+/// MATERIAL: algo que se compra a un proveedor, con su precio de tarifa.
+/// PARTIDA: una unidad de obra propia ya tarifada por el reformista (cambiar un
+/// plato de ducha, dejar un punto nuevo de agua), con mano de obra incluida.
+enum TipoCatalogo {
+  MATERIAL
+  PARTIDA
+}
+
 enum TipoInforme {
   PATOLOGIAS
   PERICIAL
@@ -140,21 +148,34 @@ model Proveedor {
   @@index([empresaId])
 }
 
+/// Entrada del catálogo de la empresa: un material que se compra, o una unidad de
+/// obra propia ("cambiar plato de ducha", "punto nuevo de agua") con su precio ya
+/// cerrado. Las partidas son lo que evita que la IA se invente precios de trabajos
+/// que el reformista ya tiene tarifados.
 model Producto {
-  id        String    @id @default(cuid())
+  id        String     @id @default(cuid())
   empresaId String
-  empresa   Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  provId    String
-  proveedor Proveedor @relation(fields: [provId, empresaId], references: [id, empresaId], onDelete: Cascade)
+  empresa   Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  /// Opcional: una partida de mano de obra propia no tiene proveedor.
+  provId    String?
+  proveedor Proveedor? @relation(fields: [provId, empresaId], references: [id, empresaId], onDelete: Cascade)
+  tipo      TipoCatalogo @default(MATERIAL)
   nombre    String
+  /// Descripción técnica que se copia tal cual a la línea del presupuesto. En una
+  /// partida es lo que el cliente lee, así que la escribe el reformista una vez y
+  /// sale igual en todos sus presupuestos.
+  descripcion String?
+  /// Capítulo de obra al que pertenece la partida, para agrupar en el presupuesto.
+  capitulo  String?
   unidad    String
   precio    Float
-  fecha     DateTime  @default(now())
+  fecha     DateTime   @default(now())
   /// URL de la ficha del producto en la web del proveedor, para el botón "Comprobar precio".
   url       String?
 
   @@index([empresaId])
   @@index([provId, empresaId])
+  @@index([empresaId, tipo])
 }
 
 model Presupuesto {

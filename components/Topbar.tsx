@@ -7,7 +7,7 @@ import { signOut } from "next-auth/react";
 const TABS: [string, string][] = [
   ["/panel", "Panel"],
   ["/clientes", "Clientes"],
-  ["/precios", "Precios"],
+  ["/catalogo", "Catálogo"],
   ["/presupuestos", "Presupuestos"],
   ["/informes", "Informes"],
 ];

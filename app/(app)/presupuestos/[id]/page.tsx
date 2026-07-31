@@ -49,7 +49,7 @@ export default async function PresupuestoDetailPage({ params }: { params: { id: 
         nif: c.nif ?? "",
         email: c.email ?? "",
       }))}
-      productos={productos.map((p) => ({ id: p.id, nombre: p.nombre, unidad: p.unidad, precio: p.precio }))}
+      productos={productos.map((p) => ({ id: p.id, nombre: p.nombre, unidad: p.unidad, precio: p.precio, tipo: p.tipo as "MATERIAL" | "PARTIDA" }))}
       empresa={{
         nombre: empresa.nombre,
         cif: empresa.cif,

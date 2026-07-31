@@ -58,4 +58,35 @@ input.inp:focus,select.inp:focus,textarea.inp:focus{outline:2px solid var(--ambe
 .logincard{background:#fff;border-radius:10px;padding:0;width:380px;overflow:hidden}
 .sig-canvas{border:2px dashed var(--line);border-radius:8px;touch-action:none;background:#fff;width:100%}
 .error{color:var(--red);font-size:14px}
-@media(max-width:700px){.main{padding:12px}.t{font-size:13px}.hidemob{display:none}}
+.g3{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+
+/* Alterna tabla (escritorio) y fichas (móvil). Se pintan las dos y manda el CSS:
+   así no hace falta medir la pantalla en JavaScript, que en el primer render del
+   servidor no la conoce y provoca un salto visible. */
+.solo-movil{display:none}
+
+/* Ficha de línea de presupuesto en móvil: la tabla de 9 columnas era ilegible y
+   la unidad quedaba en un hueco de 70 px. Aquí cada línea es un bloque con sus
+   campos etiquetados y las cantidades en una fila de tres. */
+.linea-movil{border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px;background:#fff}
+.linea-movil .cab{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.linea-movil .cab .num{font-family:var(--font-d);color:var(--mut);font-size:13px}
+.linea-movil .tres{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:8px;margin-top:8px}
+.linea-movil .pie{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)}
+
+@media(max-width:700px){
+  .main{padding:12px}
+  .t{font-size:13px}
+  .hidemob{display:none}
+  .solo-movil{display:block}
+  .solo-escritorio{display:none}
+  /* iOS hace zoom al enfocar un campo de menos de 16px, y al volver deja la
+     página descolocada. Con 16px se queda quieta. */
+  input.inp,select.inp,textarea.inp{font-size:16px;padding:10px 12px}
+  .modal{padding:16px;max-height:94vh;border-radius:8px}
+  .modalbg{padding:8px;align-items:flex-start}
+  /* Los botones de acción llenan el ancho: en el pulgar se fallan menos. */
+  .row .btn{flex:1 1 auto;min-height:42px}
+  .btn.sm{min-height:36px}
+  .kpi .v{font-size:22px}
+}

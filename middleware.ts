@@ -8,7 +8,7 @@ export const config = {
   matcher: [
     "/panel/:path*",
     "/clientes/:path*",
-    "/precios/:path*",
+    "/catalogo/:path*",
     "/presupuestos/:path*",
     "/informes/:path*",
     "/facturas/:path*",

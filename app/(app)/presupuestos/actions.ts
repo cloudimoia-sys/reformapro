@@ -214,19 +214,34 @@ export async function agregarMaterialDelCatalogo(presupuestoId: string, producto
       db.producto.findFirst({ where: { id: productoId }, include: { proveedor: true } }),
       db.lineaPresupuesto.count({ where: { presupuestoId } }),
     ]);
-    if (!producto) throw new Error("Material no encontrado");
+    if (!producto) throw new Error("No encontrado en el catálogo");
+
+    /**
+     * Una partida propia ya viene redactada por el reformista: su concepto y su
+     * descripción se copian tal cual, sin tocar nada. Un material, en cambio, se
+     * convierte en línea: concepto corto y el nombre comercial completo con el
+     * proveedor en la descripción, que es donde el cliente busca el detalle.
+     */
+    const esPartida = producto.tipo === "PARTIDA";
+    const linea = esPartida
+      ? {
+          capitulo: producto.capitulo || "Varios",
+          concepto: producto.nombre,
+          descripcion: producto.descripcion || "",
+        }
+      : {
+          capitulo: "Materiales",
+          concepto: conceptoCorto(producto.nombre),
+          descripcion:
+            `Suministro de ${producto.nombre}.` +
+            (producto.proveedor ? ` Proveedor: ${producto.proveedor.nombre}.` : ""),
+        };
 
     await db.lineaPresupuesto.create({
       data: {
         empresaId,
         presupuestoId,
-        capitulo: "Materiales",
-        concepto: conceptoCorto(producto.nombre),
-        // El nombre comercial completo va aquí, que es donde el cliente espera
-        // encontrar el detalle. Antes ponía "Material · Proveedor", que no decía
-        // nada, y el nombre largo ocupaba el concepto: justo al revés que las
-        // demás partidas, donde el concepto es corto y el detalle va debajo.
-        descripcion: `Suministro de ${producto.nombre}. Proveedor: ${producto.proveedor.nombre}.`,
+        ...linea,
         cantidad: 1,
         unidad: producto.unidad,
         precio: producto.precio,

@@ -138,6 +138,7 @@ export default function WizardIA({
   const [f, setF] = useState<Form>({ tipo: "Baño completo", m2: "", calidad: "Media", estancias: "", detalles: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [sinMateriales, setSinMateriales] = useState(false);
   const [plano, setPlano] = useState<Plano | null>(null);
   const [leyendoPlano, setLeyendoPlano] = useState(false);
   const [errorPlano, setErrorPlano] = useState("");
@@ -209,6 +210,7 @@ export default function WizardIA({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...f,
+          sinMateriales,
           // Solo viajan las estancias con superficie confirmada: una estancia sin
           // m² no aporta nada al cálculo y solo induciría a la IA a inventárselos.
           plano: plano
@@ -368,6 +370,25 @@ export default function WizardIA({
             placeholder="Ej: baño principal y aseo · forjado de planta primera · cubierta trasera"
           />
         </div>
+        <div className="field" style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 12 }}>
+          <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={sinMateriales}
+              onChange={(e) => setSinMateriales(e.target.checked)}
+              style={{ marginTop: 3, width: 18, height: 18, flexShrink: 0 }}
+            />
+            <span>
+              <strong>Solo ejecución: el cliente pone los materiales</strong>
+              <span className="hint" style={{ display: "block", marginTop: 2 }}>
+                Presupuesta mano de obra, demoliciones, escombros, instalaciones y seguridad, pero deja fuera
+                sanitarios, platos de ducha, muebles, pavimentos y alicatados. El pequeño material de agarre
+                (mortero, cola, sellantes) sí se incluye.
+              </span>
+            </span>
+          </label>
+        </div>
+
         <div className="field">
           <label className="lbl">Detalles: ¿qué hay que hacer exactamente?</label>
           <textarea

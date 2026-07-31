@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireTenant, requireTenantAdmin } from "@/lib/session";
 import { comprobarPrecioUrl } from "@/lib/priceCheck";
 import { ejecutar, type Resultado } from "@/lib/accion";
+import { normalizarUnidad } from "@/lib/unidades";
+import type { ContextoTenant } from "@/lib/session";
 
 function normalizarUrl(web: string): string | null {
   const v = web.trim();
@@ -18,7 +20,7 @@ export async function crearProveedor(data: ProveedorInput): Promise<Resultado> {
     const { db, empresaId } = await requireTenant();
     if (!data.nombre.trim()) throw new Error("El nombre es obligatorio");
     await db.proveedor.create({ data: { empresaId, nombre: data.nombre, web: normalizarUrl(data.web) } });
-    revalidatePath("/precios");
+    revalidatePath("/catalogo");
   });
 }
 
@@ -31,50 +33,75 @@ export async function actualizarProveedor(id: string, data: ProveedorInput): Pro
       data: { nombre: data.nombre, web: normalizarUrl(data.web) },
     });
     if (r.count === 0) throw new Error("Proveedor no encontrado");
-    revalidatePath("/precios");
+    revalidatePath("/catalogo");
   });
 }
 
 export type ProductoInput = {
+  tipo: "MATERIAL" | "PARTIDA";
+  /** Vacío en las partidas propias: la mano de obra no tiene proveedor. */
   provId: string;
   nombre: string;
+  descripcion: string;
+  capitulo: string;
   unidad: string;
   precio: number;
   url: string;
 };
 
+/**
+ * Prepara los datos comunes al alta y la edición.
+ *
+ * El proveedor solo se exige y se comprueba en los materiales. En una partida
+ * propia ("cambiar plato de ducha") no hay a quién comprar, así que forzarlo
+ * obligaría a inventarse un proveedor falso para poder guardarla.
+ */
+async function prepararProducto(db: ContextoTenant["db"], data: ProductoInput) {
+  if (!data.nombre.trim()) throw new Error("El nombre es obligatorio");
+
+  const esMaterial = data.tipo !== "PARTIDA";
+  let provId: string | null = null;
+
+  if (esMaterial) {
+    // provId llega del navegador: hay que comprobar que ese proveedor es de esta
+    // empresa. (La clave foránea compuesta también lo impediría, pero así el
+    // mensaje de error es comprensible.)
+    if (!data.provId) throw new Error("Elige un proveedor para el material");
+    const proveedor = await db.proveedor.findFirst({ where: { id: data.provId }, select: { id: true } });
+    if (!proveedor) throw new Error("Proveedor no encontrado");
+    provId = proveedor.id;
+  }
+
+  return {
+    tipo: esMaterial ? ("MATERIAL" as const) : ("PARTIDA" as const),
+    provId,
+    nombre: data.nombre.trim(),
+    descripcion: data.descripcion?.trim() || null,
+    capitulo: data.capitulo?.trim() || null,
+    unidad: normalizarUnidad(data.unidad),
+    precio: data.precio,
+    // Solo los materiales tienen ficha en la web de un proveedor.
+    url: esMaterial ? normalizarUrl(data.url) : null,
+    fecha: new Date(),
+  };
+}
+
 export async function crearProducto(data: ProductoInput): Promise<Resultado> {
   return ejecutar("crearProducto", async () => {
     const { db, empresaId } = await requireTenant();
-    if (!data.nombre.trim()) throw new Error("El nombre es obligatorio");
-
-    // provId llega del navegador: hay que comprobar que ese proveedor es de esta
-    // empresa antes de colgarle un material. (La clave foránea compuesta también lo
-    // impediría, pero así el mensaje de error es comprensible.)
-    const proveedor = await db.proveedor.findFirst({ where: { id: data.provId }, select: { id: true } });
-    if (!proveedor) throw new Error("Proveedor no encontrado");
-
-    const { url, ...resto } = data;
-    await db.producto.create({ data: { ...resto, empresaId, url: normalizarUrl(url), fecha: new Date() } });
-    revalidatePath("/precios");
+    const datos = await prepararProducto(db, data);
+    await db.producto.create({ data: { ...datos, empresaId } });
+    revalidatePath("/catalogo");
   });
 }
 
 export async function actualizarProducto(id: string, data: ProductoInput): Promise<Resultado> {
   return ejecutar("actualizarProducto", async () => {
     const { db } = await requireTenant();
-    if (!data.nombre.trim()) throw new Error("El nombre es obligatorio");
-
-    const proveedor = await db.proveedor.findFirst({ where: { id: data.provId }, select: { id: true } });
-    if (!proveedor) throw new Error("Proveedor no encontrado");
-
-    const { url, ...resto } = data;
-    const r = await db.producto.updateMany({
-      where: { id },
-      data: { ...resto, url: normalizarUrl(url), fecha: new Date() },
-    });
-    if (r.count === 0) throw new Error("Material no encontrado");
-    revalidatePath("/precios");
+    const datos = await prepararProducto(db, data);
+    const r = await db.producto.updateMany({ where: { id }, data: datos });
+    if (r.count === 0) throw new Error("No encontrado en el catálogo");
+    revalidatePath("/catalogo");
   });
 }
 
@@ -82,8 +109,8 @@ export async function borrarProducto(id: string): Promise<Resultado> {
   return ejecutar("borrarProducto", async () => {
     const { db } = await requireTenantAdmin();
     const r = await db.producto.deleteMany({ where: { id } });
-    if (r.count === 0) throw new Error("Material no encontrado");
-    revalidatePath("/precios");
+    if (r.count === 0) throw new Error("No encontrado en el catálogo");
+    revalidatePath("/catalogo");
   });
 }
 
@@ -96,7 +123,7 @@ export async function comprobarPrecioProducto(id: string): Promise<Resultado<num
 
     const precio = await comprobarPrecioUrl(producto.url);
     await db.producto.updateMany({ where: { id }, data: { precio, fecha: new Date() } });
-    revalidatePath("/precios");
+    revalidatePath("/catalogo");
     return precio;
   });
 }
