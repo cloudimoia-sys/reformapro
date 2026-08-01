@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { eur } from "@/lib/format";
 import { importePartida, pem, ETIQUETA_TIPO, type ContenidoInforme, type PartidaInforme } from "@/lib/informe";
 import { exportInformeWord, exportInformeExcel, exportInformePDF, type InformeDoc } from "@/lib/informeExport";
+import { DOCUMENTOS } from "@/lib/documentos";
 import type { EmpresaDoc, ClienteDoc } from "@/lib/docExport";
 import { actualizarInforme, actualizarPieFoto, borrarFoto } from "../actions";
 
@@ -13,7 +14,7 @@ type Foto = { id: string; datos: string; pie: string };
 export type InformeCompleto = {
   id: string;
   numero: string;
-  tipo: "PATOLOGIAS" | "PERICIAL";
+  tipo: import("@/lib/documentos").TipoDocumento;
   titulo: string;
   fecha: string;
   inmueble: string;
@@ -84,6 +85,7 @@ export default function InformeEditor({
   };
 
   const total = pem(inf.contenido.partidas);
+  const conPresupuesto = DOCUMENTOS[inf.tipo]?.conPresupuesto ?? true;
   const vacios = inf.contenido.apartados.filter((a) => !a.texto?.trim() && !a.subapartados?.length);
 
   const doc: InformeDoc = {
@@ -203,7 +205,7 @@ export default function InformeEditor({
         </div>
       ))}
 
-      <h3 style={{ fontSize: 17, margin: "18px 0 6px" }}>Presupuesto de reparación</h3>
+      {conPresupuesto && (<><h3 style={{ fontSize: 17, margin: "18px 0 6px" }}>Presupuesto de reparación</h3>
       <table className="t">
         <thead>
           <tr>
@@ -276,7 +278,7 @@ export default function InformeEditor({
           </span>
         )}
       </div>
-      <p className="hint">No incluye gastos generales, beneficio industrial ni IVA.</p>
+      <p className="hint">No incluye gastos generales, beneficio industrial ni IVA.</p></>)}
 
       <h3 style={{ fontSize: 17, margin: "18px 0 6px" }}>Dictamen</h3>
       <textarea

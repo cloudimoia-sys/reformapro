@@ -20,7 +20,7 @@ export default async function InformePage({ params }: { params: { id: string } }
   const informe: InformeCompleto = {
     id: inf.id,
     numero: inf.numero,
-    tipo: inf.tipo as "PATOLOGIAS" | "PERICIAL",
+    tipo: inf.tipo,
     titulo: inf.titulo,
     fecha: inf.fecha.toISOString().slice(0, 10),
     inmueble: inf.inmueble,

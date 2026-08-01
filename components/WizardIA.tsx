@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { LineaIA } from "@/app/(app)/presupuestos/actions";
+import Dictar from "@/components/Dictar";
 
 type Form = { tipo: string; m2: string; calidad: string; estancias: string; detalles: string };
 
@@ -414,7 +415,11 @@ export default function WizardIA({
         </div>
 
         <div className="field">
-          <label className="lbl">Detalles: ¿qué hay que hacer exactamente?</label>
+          <div className="row" style={{ marginBottom: 4 }}>
+            <label className="lbl" style={{ margin: 0 }}>Detalles: ¿qué hay que hacer exactamente?</label>
+            <div className="spacer" />
+            <Dictar disabled={loading} onTexto={(t) => setF((prev) => ({ ...prev, detalles: prev.detalles ? `${prev.detalles} ${t}` : t }))} />
+          </div>
           <textarea
             className="inp"
             rows={4}

@@ -41,7 +41,7 @@ export default function InformesListClient({
 
   const borrar = async (id: string, numero: string, ev: React.MouseEvent) => {
     ev.stopPropagation();
-    if (!window.confirm(`¿Eliminar el informe ${numero}? Se borrarán también sus fotos.`)) return;
+    if (!window.confirm(`¿Eliminar el documento ${numero}? Se borrarán también sus fotos.`)) return;
     const r = await borrarInforme(id);
     if (!r.ok) return window.alert(r.error);
     router.refresh();
@@ -50,13 +50,14 @@ export default function InformesListClient({
   return (
     <div className="card">
       <div className="row" style={{ marginBottom: 10 }}>
-        <h2 style={{ fontSize: 22 }}>Informes</h2>
+        <h2 style={{ fontSize: 22 }}>Informes y documentos</h2>
         <div className="spacer" />
-        <button className="btn amber" onClick={() => setAsistente(true)}>+ Nuevo con IA</button>
+        <button className="btn amber" onClick={() => setAsistente(true)}>+ Nuevo documento</button>
       </div>
       <p className="hint" style={{ marginBottom: 10 }}>
-        Informes técnicos de patologías y dictámenes periciales, con anexo fotográfico y presupuesto de reparación.
-        Exportables a Word y Excel.
+        Informes de patologías, dictámenes periciales, actas de visita y entrega, certificados, memorias técnicas,
+        planes de trabajo, certificaciones, reclamaciones, cartas al seguro y solicitudes al ayuntamiento. Con anexo
+        fotográfico y presupuesto cuando el documento lo lleva. Exportables a Word, Excel y PDF.
       </p>
       <table className="t">
         <thead>
@@ -65,7 +66,7 @@ export default function InformesListClient({
             <th>Informe</th>
             <th className="hidemob">Inmueble</th>
             <th className="hidemob">Fecha</th>
-            <th>Tipo</th>
+            <th className="hidemob">Tipo</th>
             <th>Estado</th>
             <th></th>
           </tr>
@@ -80,7 +81,7 @@ export default function InformesListClient({
               </td>
               <td className="hidemob">{x.inmueble || "—"}</td>
               <td className="hidemob">{x.fecha}</td>
-              <td><span className="badge b-enviado">{x.tipo === "PERICIAL" ? "pericial" : "patologías"}</span></td>
+              <td className="hidemob"><span className="badge b-enviado">{ETIQUETA_TIPO[x.tipo]}</span></td>
               <td>
                 <span className={`badge ${x.estado === "FINALIZADO" ? "b-facturado" : ""}`}>
                   {x.estado === "FINALIZADO" ? "finalizado" : "borrador"}
@@ -92,7 +93,7 @@ export default function InformesListClient({
             </tr>
           ))}
           {!informes.length && (
-            <tr><td colSpan={7} className="hint">Sin informes todavía. Crea el primero con la IA.</td></tr>
+            <tr><td colSpan={7} className="hint">Sin documentos todavía. Crea el primero con la IA.</td></tr>
           )}
         </tbody>
       </table>

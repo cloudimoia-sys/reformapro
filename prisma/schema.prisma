@@ -45,9 +45,20 @@ enum TipoCatalogo {
   PARTIDA
 }
 
+/// Tipos de documento que sabe redactar la app. La plantilla de cada uno vive en
+/// lib/documentos.ts; aquí solo está el valor que se guarda.
 enum TipoInforme {
   PATOLOGIAS
   PERICIAL
+  ACTA_VISITA
+  ACTA_ENTREGA
+  CERTIFICADO_OBRA
+  MEMORIA_TECNICA
+  PLAN_TRABAJO
+  CERTIFICACION
+  RECLAMACION
+  CARTA_SEGURO
+  SOLICITUD_AYUNTAMIENTO
 }
 
 enum EstadoInforme {

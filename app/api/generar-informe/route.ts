@@ -5,6 +5,7 @@ import { guionDe, JURAMENTO, DECLARACION_TACHAS, type TipoInforme } from "@/lib/
 import { textoSospechoso, faltanReposiciones } from "@/lib/revision";
 import { normalizarIndirectos } from "@/lib/indirectos";
 import { bloqueBaremo } from "@/lib/baremo";
+import { definicionDe } from "@/lib/documentos";
 
 export const maxDuration = 60;
 
@@ -53,10 +54,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Petición mal formada." }, { status: 400 });
   }
 
-  const tipo: TipoInforme = f.tipo === "PERICIAL" ? "PERICIAL" : "PATOLOGIAS";
+  // El tipo se valida contra la tabla: lo que llegue del navegador no elige
+  // plantilla por su cuenta.
+  const { tipo, def } = definicionDe(String(f.tipo || ""));
   if (!f.danos?.trim()) {
     return NextResponse.json(
-      { error: "Describe los daños observados: es lo que da contenido al informe." },
+      { error: `${def.pregunta}: es lo que da contenido al documento.` },
       { status: 400 }
     );
   }
@@ -76,16 +79,16 @@ export async function POST(req: Request) {
         .join("\n")
     : "(no se aportan imágenes)";
 
-  const prompt = `Eres un arquitecto técnico español con veinte años redactando informes de patologías y dictámenes periciales. Escribes en el registro técnico-jurídico propio de estos documentos: preciso, impersonal y sin adornos.
+  const prompt = `Eres un arquitecto técnico español con veinte años de oficio, y redactas la documentación de obra que se entrega a clientes, aseguradoras, administraciones y juzgados. Escribes en el registro propio de cada documento: preciso, impersonal y sin adornos.
 
-TIPO DE INFORME: ${tipo === "PERICIAL" ? "Dictamen pericial judicial" : "Informe técnico de patologías"}
+TIPO DE DOCUMENTO: ${def.etiqueta}
 
 DATOS APORTADOS
 - Inmueble: ${f.inmueble || "no indicado"}
 - Solicitante: ${f.solicitante || "no indicado"}
 - Perito que firma: ${f.perito || "no indicado"}${f.titulacion ? ` (${f.titulacion})` : ""}${f.colegiado ? `, colegiado nº ${f.colegiado}` : ""}
 - Antecedentes: ${f.antecedentes || "no se aportan"}
-- Daños observados según el técnico: ${f.danos}
+- ${def.pregunta}: ${f.danos}
 
 IMÁGENES ADJUNTAS (analízalas de verdad, están al principio de este mensaje):
 ${listaImagenes}
@@ -106,17 +109,17 @@ Evolución previsible: qué ocurrirá si no se interviene.
 - En la propuesta de actuación, cada fase lleva su propio subapartado, y dentro los trabajos van uno por línea con su etiqueta ("Apeo preventivo: ...", "Saneado: ...").
 - Gradúa la gravedad con criterio estructural: MUY ALTO solo si hay riesgo de colapso o pérdida de capacidad portante.
 - Propón soluciones constructivas concretas y ejecutables, con su justificación técnica (por qué esa y no otra).
-- EL PRESUPUESTO TIENE QUE CUBRIR LA PROPUESTA ENTERA. Repasa las fases que has escrito y comprueba que cada trabajo tiene su partida. Si propones reponer bovedillas, presupuesta la reposición, no solo el saneado.
-- TODO LO QUE SE PICA SE REPONE. Detrás de cada demolición, picado o retirada van sus partidas de reposición y acabado: reponer el elemento, enfoscar, enlucir y pintar. Un presupuesto que abre la obra y no la cierra deja al cliente con el techo abierto y al reformista pagando la diferencia.
-${tipo === "PERICIAL" ? `- El juramento y la declaración de tachas los añade el sistema: no los redactes ni los resumas.\n- Delimita el ALCANCE con honestidad: di expresamente qué no se ha podido comprobar (sin catas, sin acceso, sin proyecto). Un informe que no acota su alcance se vuelve en contra del perito.\n` : ""}- No redactes el apartado económico como texto: rellena "partidas".
+${def.conPresupuesto ? `- EL PRESUPUESTO TIENE QUE CUBRIR LA PROPUESTA ENTERA. Repasa las fases que has escrito y comprueba que cada trabajo tiene su partida. Si propones reponer bovedillas, presupuesta la reposición, no solo el saneado.
+- TODO LO QUE SE PICA SE REPONE. Detrás de cada demolición, picado o retirada van sus partidas de reposición y acabado: reponer el elemento, enfoscar, enlucir y pintar. Un presupuesto que abre la obra y no la cierra deja al cliente con el techo abierto y al reformista pagando la diferencia.` : ""}
+${tipo === "PERICIAL" ? `- El juramento y la declaración de tachas los añade el sistema: no los redactes ni los resumas.\n- Delimita el ALCANCE con honestidad: di expresamente qué no se ha podido comprobar (sin catas, sin acceso, sin proyecto). Un informe que no acota su alcance se vuelve en contra del perito.\n` : ""}${def.conPresupuesto ? '- No redactes el apartado económico como texto: rellena "partidas".' : ""}
 
-${bloqueBaremo(false)}
+${def.conPresupuesto ? bloqueBaremo(false) : ""}
 
-PARTIDAS, POR CAPÍTULOS. Agrupa el presupuesto en capítulos de obra y numera en dos niveles: el capítulo es "01", "02", "03" y sus partidas "01.01", "01.02". Todas las partidas de un mismo elemento o fase van en el mismo capítulo.
+${def.conPresupuesto ? `PARTIDAS, POR CAPÍTULOS. Agrupa el presupuesto en capítulos de obra y numera en dos niveles: el capítulo es "01", "02", "03" y sus partidas "01.01", "01.02". Todas las partidas de un mismo elemento o fase van en el mismo capítulo.
 
 Marca con "opcional": true las mejoras recomendables que NO hacen falta para resolver la patología (por ejemplo, revestir y pintar todo un techo cuando solo se ha intervenido en una zona). Van al final de su capítulo. Lo obligatorio y lo opcional se suman por separado: si se mezclan, el cliente ve una cifra más alta de la necesaria y se echa atrás.
 
-Presupuesto de ejecución material de la reparación, con precios reales del mercado español actual. Incluye SIEMPRE seguridad y salud y gestión de residuos: son obligatorias en cualquier obra y su ausencia deja el presupuesto corto. Escribe todo en español, sin una sola palabra ni carácter de otro idioma. El precio es la unidad de obra completa (material, mano de obra y medios auxiliares). Códigos jerárquicos por capítulos: 01, 01.01, 01.02, 02, 02.01…
+Presupuesto de ejecución material de la reparación, con precios reales del mercado español actual. Incluye SIEMPRE seguridad y salud y gestión de residuos: son obligatorias en cualquier obra y su ausencia deja el presupuesto corto. Escribe todo en español, sin una sola palabra ni carácter de otro idioma. El precio es la unidad de obra completa (material, mano de obra y medios auxiliares). Códigos jerárquicos por capítulos: 01, 01.01, 01.02, 02, 02.01…` : "Este documento NO lleva presupuesto: devuelve \"partidas\" como lista vacía."}
 
 Responde SOLO con JSON válido, sin markdown:
 {
@@ -240,10 +243,10 @@ Responde SOLO con JSON válido, sin markdown:
     );
 
     const textoPartidas = JSON.stringify(partidasFinales).toLowerCase();
-    if (partidasFinales.length && !/seguridad|salud|epi/.test(textoPartidas)) {
+    if (def.conPresupuesto && partidasFinales.length && !/seguridad|salud|epi/.test(textoPartidas)) {
       avisos.push("El presupuesto no incluye seguridad y salud, que es obligatoria en toda obra.");
     }
-    if (partidasFinales.length && !/residuo|escombro|vertedero|contenedor/.test(textoPartidas)) {
+    if (def.conPresupuesto && partidasFinales.length && !/residuo|escombro|vertedero|contenedor/.test(textoPartidas)) {
       avisos.push("El presupuesto no incluye gestión de residuos.");
     }
 

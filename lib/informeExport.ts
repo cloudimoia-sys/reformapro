@@ -11,6 +11,7 @@ import {
   type TipoInforme,
 } from "@/lib/informe";
 import type { EmpresaDoc, ClienteDoc } from "@/lib/docExport";
+import { DOCUMENTOS } from "@/lib/documentos";
 
 export type InformeDoc = {
   numero: string;
@@ -90,10 +91,13 @@ function nombreCapitulo(primeraDescripcion: string) {
 function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc, paraWord: boolean) {
   const { apartados, partidas, dictamen } = inf.contenido;
   const desglose = desglosePresupuesto(partidas);
+  // Un acta de visita o un certificado no llevan presupuesto: la sección entera
+  // desaparece en vez de salir con una tabla vacía.
+  const conPresupuesto = (DOCUMENTOS[inf.tipo]?.conPresupuesto ?? true) && partidas.length > 0;
 
   const entradas = [
     ...apartados.map((a) => `${esc(a.numero)}. ${esc(a.titulo)}`),
-    "PRESUPUESTO DE REPARACIÓN",
+    ...(conPresupuesto ? ["PRESUPUESTO DE REPARACIÓN"] : []),
     ...(dictamen ? ["DICTAMEN"] : []),
     ...(inf.fotos.length ? ["ANEXO FOTOGRÁFICO"] : []),
   ];
@@ -221,6 +225,7 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc, para
 
   ${cuerpo}
 
+  ${conPresupuesto ? `
   <h2 style="font-size:15px;margin:18px 0 6px;border-bottom:1px solid #999;padding-bottom:3px;mso-outline-level:1">PRESUPUESTO DE REPARACIÓN</h2>
   <table style="width:100%;border-collapse:collapse;font-size:11px" border="1" cellspacing="0" cellpadding="4">
     <thead><tr style="background:#eee">
@@ -269,6 +274,7 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc, para
     Valoración orientativa a precios de mercado, sujeta a comprobación una vez abiertas las catas y descubiertos
     los elementos afectados. No constituye oferta contractual.
   </p>
+  ` : ""}
 
   ${dictamen ? `<h2 style="font-size:15px;margin:18px 0 6px;border-bottom:1px solid #999;padding-bottom:3px;mso-outline-level:1">DICTAMEN</h2>${parrafos(dictamen)}` : ""}
 

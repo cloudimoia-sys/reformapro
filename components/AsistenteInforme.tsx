@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { ContenidoInforme, TipoInforme } from "@/lib/informe";
+import { DOCUMENTOS, documentosPorGrupo } from "@/lib/documentos";
+import Dictar from "@/components/Dictar";
 import type { DatosInforme, FotoNueva } from "@/app/(app)/informes/actions";
 
 /**
@@ -58,6 +60,7 @@ export default function AsistenteInforme({
   onCancel: () => void;
 }) {
   const [tipo, setTipo] = useState<TipoInforme>("PATOLOGIAS");
+  const def = DOCUMENTOS[tipo];
   const [inmueble, setInmueble] = useState("");
   const [refCatastral, setRefCatastral] = useState("");
   const [solicitante, setSolicitante] = useState("");
@@ -177,19 +180,26 @@ export default function AsistenteInforme({
     <div className="modalbg">
       <div className="modal" style={{ maxWidth: 760 }}>
         <div className="tapebar" style={{ margin: "-22px -22px 16px" }} />
-        <h2 style={{ fontSize: 24 }}>Nuevo informe con IA</h2>
+        <h2 style={{ fontSize: 24 }}>Nuevo documento con IA</h2>
         <p className="hint">
           La IA redacta el borrador a partir de lo que le cuentes y de las fotos que subas. Revísalo y corrígelo
-          después: <strong>el informe lo firma quien lo entrega</strong>, y en un dictamen pericial debe hacerlo un
-          técnico competente, que responde de su contenido.
+          después: <strong>el documento lo firma quien lo entrega</strong> y responde de su contenido.
         </p>
+        {def.advertencia && (
+          <p className="hint" style={{ color: "var(--amber-d, #92400e)" }}><strong>{def.advertencia}</strong></p>
+        )}
 
         <div className="grid g2">
           <div className="field">
             <label className="lbl">Tipo de informe</label>
             <select className="inp" value={tipo} onChange={(e) => setTipo(e.target.value as TipoInforme)}>
-              <option value="PATOLOGIAS">Informe técnico de patologías</option>
-              <option value="PERICIAL">Dictamen pericial (judicial)</option>
+              {documentosPorGrupo().map((g) => (
+                <optgroup key={g.grupo} label={g.grupo}>
+                  {g.docs.map(({ tipo: t, def: d }) => (
+                    <option key={t} value={t}>{d.etiqueta}</option>
+                  ))}
+                </optgroup>
+              ))}
             </select>
           </div>
           <div className="field">
@@ -240,13 +250,22 @@ export default function AsistenteInforme({
         </div>
 
         <div className="field">
-          <label className="lbl">Daños observados: descríbelos con detalle</label>
+          <div className="row" style={{ marginBottom: 4 }}>
+            <label className="lbl" style={{ margin: 0 }}>{def.pregunta}</label>
+            <div className="spacer" />
+            {/* Dictar aquí y no en los campos cortos: este es el que se rellena en
+                obra, con el móvil en la mano y diez líneas por escribir. */}
+            <Dictar
+              disabled={cargando}
+              onTexto={(t) => setDanos((prev) => (prev ? `${prev} ${t}` : t))}
+            />
+          </div>
           <textarea
             className="inp"
             rows={5}
             value={danos}
             onChange={(e) => setDanos(e.target.value)}
-            placeholder="Cuanto más concreto, mejor sale. Ej: fisuras a 45º en tabiquería de planta primera, más abiertas hacia la medianera; desnivel apreciable en el solado del salón; puerta de paso que roza; grieta vertical en fachada junto al encuentro con la medianera."
+            placeholder={`Cuanto más concreto, mejor sale. Ej: ${def.ejemplo}`}
           />
         </div>
 
