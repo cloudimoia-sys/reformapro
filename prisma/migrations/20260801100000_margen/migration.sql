@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Empresa" ADD COLUMN     "margenDefecto" DOUBLE PRECISION NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "Presupuesto" ADD COLUMN     "margen" DOUBLE PRECISION NOT NULL DEFAULT 0;

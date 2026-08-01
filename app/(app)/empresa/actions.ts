@@ -11,6 +11,7 @@ export type EmpresaInput = {
   tel: string;
   email: string;
   ivaDefecto: number;
+  margenDefecto: number;
 };
 
 export async function actualizarEmpresa(data: EmpresaInput): Promise<Resultado> {
@@ -19,7 +20,15 @@ export async function actualizarEmpresa(data: EmpresaInput): Promise<Resultado> 
     // Antes era un upsert sobre id:1, la fila única. Ahora cada empresa tiene la suya.
     // El id sale de la sesión (y el cliente filtrado lo vuelve a forzar), nunca del
     // navegador, así que aquí un update normal sí es seguro.
-    await db.empresa.update({ where: { id: empresaId }, data });
+    await db.empresa.update({
+      where: { id: empresaId },
+      data: {
+        ...data,
+        // Acotado: un margen negativo restaría del total y uno del 500% saldría de
+        // un dedo resbalado, no de una decisión.
+        margenDefecto: Math.min(60, Math.max(0, Number(data.margenDefecto) || 0)),
+      },
+    });
     revalidatePath("/empresa");
   });
 }

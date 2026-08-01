@@ -18,6 +18,7 @@ export default async function EmpresaPage() {
         tel: empresa.tel,
         email: empresa.email,
         ivaDefecto: empresa.ivaDefecto,
+        margenDefecto: empresa.margenDefecto,
       }}
       logoInicial={empresa.logo}
     />

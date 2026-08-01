@@ -27,6 +27,7 @@ export default async function PresupuestoDetailPage({ params }: { params: { id: 
         clienteId: presupuesto.clienteId ?? "",
         fecha: presupuesto.fecha.toISOString().slice(0, 10),
         iva: presupuesto.iva,
+        margen: presupuesto.margen,
         estado: presupuesto.estado,
         notas: presupuesto.notas ?? "",
         firma: presupuesto.firma,

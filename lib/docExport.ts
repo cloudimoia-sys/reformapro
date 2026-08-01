@@ -2,7 +2,7 @@
 
 import * as XLSX from "xlsx";
 import { eur } from "@/lib/format";
-import { importeLinea } from "@/lib/presupuesto";
+import { importeLinea, desglosePres } from "@/lib/presupuesto";
 
 export type LineaDoc = {
   capitulo: string | null;
@@ -19,6 +19,7 @@ export type PresupuestoDoc = {
   titulo: string;
   fecha: string;
   iva: number;
+  margen?: number;
   notas: string | null;
   firma: string | null;
   fechaFirma: string | null;
@@ -40,6 +41,7 @@ function celdaDescuento(l: LineaDoc, conDescuentos: boolean) {
 }
 
 function docHTML(pres: PresupuestoDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
+  const d = desglosePres(pres);
   const conDescuentos = pres.lineas.some((l) => l.descuento > 0);
   const caps: string[] = [];
   pres.lineas.forEach((l) => {
@@ -82,7 +84,11 @@ function docHTML(pres: PresupuestoDoc, cliente: ClienteDoc, empresa: EmpresaDoc)
   <p><b>Obra:</b> ${pres.titulo}</p>
   <table><thead><tr><th>Concepto</th><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">Precio</th>${conDescuentos ? '<th style="text-align:right">Dto.</th>' : ""}<th style="text-align:right">Importe</th></tr></thead>
   <tbody>${filas}</tbody></table>
-  <div class="tot">Base imponible: ${eur(base)}<br>IVA (${pres.iva} %): ${eur(iva)}<br><b>TOTAL: ${eur(base + iva)}</b></div>
+  <div class="tot">Base imponible: ${eur(d.base)}${
+    d.porcentajeMargen > 0
+      ? `<br>Gastos generales y beneficio industrial (${d.porcentajeMargen} %): ${eur(d.importeMargen)}<br>Suma: ${eur(d.subtotal)}`
+      : ""
+  }<br>IVA (${pres.iva} %): ${eur(d.importeIva)}<br><b>TOTAL: ${eur(d.total)}</b></div>
   <p style="margin-top:16px;font-size:11px;color:#666">Presupuesto válido durante 30 días. ${pres.notas || ""}</p>
   ${pres.firma ? `<div class="firma"><b>Aprobado por el cliente</b> el ${pres.fechaFirma}<br><img src="${pres.firma}" style="height:70px"/></div>` : ""}
   </body></html>`;

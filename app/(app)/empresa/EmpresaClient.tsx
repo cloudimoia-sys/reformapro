@@ -126,6 +126,24 @@ export default function EmpresaClient({
       </div>
 
       <div className="field">
+        <label className="lbl">Gastos generales y beneficio (%)</label>
+        <input
+          className="inp"
+          type="number"
+          min={0}
+          max={60}
+          step="1"
+          defaultValue={data.margenDefecto}
+          onBlur={(e) => Number(e.target.value) !== data.margenDefecto && guardar({ margenDefecto: Number(e.target.value) })}
+        />
+        <p className="hint" style={{ marginTop: 4 }}>
+          Se aplica sobre la base de cada presupuesto nuevo, como línea aparte antes del IVA. Cubre tu estructura
+          (furgoneta, seguros, oficina, desplazamientos) y tu beneficio. En obra suele ir entre el 15 % y el 25 %.
+          Déjalo en 0 si prefieres que los precios ya lo lleven dentro. Podrás cambiarlo en cada presupuesto.
+        </p>
+      </div>
+
+      <div className="field">
         <label className="lbl">Logo (opcional)</label>
         <p className="hint" style={{ marginTop: -2, marginBottom: 8 }}>
           Solo se muestra en las facturas si lo subes. Si lo dejas vacío, las facturas salen igual que ahora.

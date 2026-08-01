@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 import { requireTenant, requireTenantAdmin, type ContextoTenant } from "@/lib/session";
 import { ejecutar, type Resultado, type ResultadoConRedirect } from "@/lib/accion";
 import { siguienteNumero } from "@/lib/counter";
-import { base as calcBase } from "@/lib/presupuesto";
+import { desglosePres } from "@/lib/presupuesto";
 
 const BLOQUEADO_ESTADOS = ["APROBADO", "FACTURADO"];
 
@@ -55,6 +55,7 @@ export async function crearPresupuestoBlanco(): Promise<ResultadoConRedirect> {
         titulo: "Nueva obra",
         fecha: new Date(),
         iva: empresa?.ivaDefecto ?? 10,
+        margen: empresa?.margenDefecto ?? 0,
         estado: "BORRADOR",
         autor: user.nombre,
       },
@@ -98,6 +99,7 @@ export async function crearPresupuestoConIA(
         titulo,
         fecha: new Date(),
         iva: empresa?.ivaDefecto ?? 10,
+        margen: empresa?.margenDefecto ?? 0,
         estado: "BORRADOR",
         autor: user.nombre,
         // Las líneas NO llevan empresaId: como apuntan al presupuesto por la pareja
@@ -131,6 +133,7 @@ export type PresupuestoPatch = Partial<{
   clienteId: string | null;
   fecha: string;
   iva: number;
+  margen: number;
   notas: string;
 }>;
 
@@ -302,7 +305,15 @@ export async function crearFacturaDesdePresupuesto(presupuestoId: string): Promi
     if (!p) throw new Error("Presupuesto no encontrado");
     if (p.estado !== "APROBADO") throw new Error("Solo se puede facturar un presupuesto Aprobado.");
 
-    const base = calcBase(p);
+    /**
+     * La base de la factura incluye el margen del presupuesto.
+     *
+     * Si no, el cliente firma un total y luego le llega una factura por menos: la
+     * base imponible de la factura tiene que ser lo que se acordó antes de IVA,
+     * gastos generales y beneficio incluidos.
+     */
+    const d = desglosePres(p);
+    const base = d.subtotal;
 
     // El número se reserva DENTRO de la transacción: si algo falla, el contador se
     // revierte y no queda un hueco en la numeración de facturas (lo exige Hacienda).
@@ -317,7 +328,7 @@ export async function crearFacturaDesdePresupuesto(presupuestoId: string): Promi
           fecha: new Date(),
           base,
           iva: p.iva,
-          total: base * (1 + p.iva / 100),
+          total: d.total,
           estado: "PENDIENTE",
         },
       });

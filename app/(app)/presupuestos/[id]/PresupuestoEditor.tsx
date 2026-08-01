@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { eur } from "@/lib/format";
-import { estadoClase, estadoLabel, importeLinea } from "@/lib/presupuesto";
+import { estadoClase, estadoLabel, importeLinea, desglosePres } from "@/lib/presupuesto";
 import { fallo } from "@/lib/accion";
 import { exportPDF, exportWord, exportExcel } from "@/lib/docExport";
 import SignaturePad from "@/components/SignaturePad";
@@ -38,6 +38,7 @@ type PresupuestoData = {
   clienteId: string;
   fecha: string;
   iva: number;
+  margen: number;
   estado: string;
   notas: string;
   firma: string | null;
@@ -72,6 +73,7 @@ export default function PresupuestoEditor({
   }, [presupuesto]);
   const bloqueado = p.estado === "APROBADO" || p.estado === "FACTURADO";
   const base = p.lineas.reduce((s, l) => s + importeLinea(l), 0);
+  const d = desglosePres(p);
   const clienteActual = clientes.find((c) => c.id === p.clienteId) || null;
 
   /**
@@ -89,7 +91,7 @@ export default function PresupuestoEditor({
     return false;
   };
 
-  const commit = async (patch: Partial<Pick<PresupuestoData, "titulo" | "clienteId" | "fecha" | "iva" | "notas">>) => {
+  const commit = async (patch: Partial<Pick<PresupuestoData, "titulo" | "clienteId" | "fecha" | "iva" | "margen" | "notas">>) => {
     setP((prev) => ({ ...prev, ...patch }));
     avisar(await actualizarPresupuesto(p.id, patch));
   };
@@ -127,7 +129,7 @@ export default function PresupuestoEditor({
     // si falla no debe impedir que se abra el correo, que es lo que el usuario pidió.
     await marcarEnviado(p.id);
     if (p.estado === "BORRADOR") setP((prev) => ({ ...prev, estado: "ENVIADO" }));
-    const cuerpo = `Estimado/a ${clienteActual ? clienteActual.nombre : "cliente"}:%0D%0A%0D%0ALe adjuntamos el presupuesto ${p.numero} - ${p.titulo}.%0D%0ATotal: ${eur(base * (1 + p.iva / 100))} (IVA incluido).%0D%0A%0D%0APuede aprobarlo firmando en nuestra aplicación o respondiendo a este correo.%0D%0A%0D%0AUn saludo,%0D%0A${empresa.nombre}`;
+    const cuerpo = `Estimado/a ${clienteActual ? clienteActual.nombre : "cliente"}:%0D%0A%0D%0ALe adjuntamos el presupuesto ${p.numero} - ${p.titulo}.%0D%0ATotal: ${eur(d.total)} (IVA incluido).%0D%0A%0D%0APuede aprobarlo firmando en nuestra aplicación o respondiendo a este correo.%0D%0A%0D%0AUn saludo,%0D%0A${empresa.nombre}`;
     window.open(`mailto:${clienteActual?.email || ""}?subject=Presupuesto ${p.numero} - ${empresa.nombre}&body=${cuerpo}`);
   };
 
@@ -136,6 +138,7 @@ export default function PresupuestoEditor({
     titulo: p.titulo,
     fecha: p.fecha,
     iva: p.iva,
+    margen: p.margen,
     notas: p.notas,
     firma: p.firma,
     fechaFirma: p.fechaFirma,
@@ -223,6 +226,23 @@ export default function PresupuestoEditor({
               <option value={21}>21 % (general)</option>
               <option value={0}>0 %</option>
             </select>
+          </div>
+          <div className="field">
+            <label className="lbl">Gastos generales y beneficio (%)</label>
+            <input
+              className="inp"
+              type="number"
+              min={0}
+              max={60}
+              step="1"
+              defaultValue={p.margen}
+              disabled={bloqueado}
+              onBlur={(e) => Number(e.target.value) !== p.margen && commit({ margen: Number(e.target.value) })}
+            />
+            <p className="hint" style={{ marginTop: 4 }}>
+              Sale como línea aparte antes del IVA. El valor inicial es el de Mi empresa; súbelo o bájalo en esta obra
+              si lo necesitas.
+            </p>
           </div>
         </div>
 
@@ -436,9 +456,13 @@ export default function PresupuestoEditor({
         )}
 
         <div style={{ textAlign: "right", marginTop: 16, fontSize: 15 }}>
-          Base imponible: <b>{eur(base)}</b> &nbsp;·&nbsp; IVA ({p.iva} %): <b>{eur((base * p.iva) / 100)}</b>
+          Base imponible: <b>{eur(d.base)}</b>
+          {d.porcentajeMargen > 0 && (
+            <> &nbsp;·&nbsp; Gastos generales y beneficio ({d.porcentajeMargen} %): <b>{eur(d.importeMargen)}</b></>
+          )}
+          &nbsp;·&nbsp; IVA ({p.iva} %): <b>{eur(d.importeIva)}</b>
           <div className="linetotal" style={{ fontSize: 26, color: "var(--blue)" }}>
-            TOTAL: {eur(base * (1 + p.iva / 100))}
+            TOTAL: {eur(d.total)}
           </div>
         </div>
 

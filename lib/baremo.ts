@@ -78,7 +78,16 @@ export const BAREMO: PrecioReferencia[] = [
   // el 60-70% del total, así que equivocarse aquí se nota más que en nada.
   // Medido en un presupuesto real: 6 ml a 1.100 €/ml daban 6.600 € sobre 8.986 €
   // totales, con un mobiliario de gama básica de gran superficie.
-  { concepto: "Mobiliario de cocina de gran superficie (Obramat, Ikea, Leroy), altos y bajos con encimera", unidad: "ml", conMaterial: 420, soloMano: 190 },
+  // 420 €/ml se quedaba corto: los muebles de gran superficie ya cuestan 200-350
+  // €/ml, y el montaje (aplomar y nivelar bajos, colgar altos, cortar encimera,
+  // hueco de fregadero y placa, sellar y conectar) son otros 150-250 €/ml. A 420
+  // no quedaba margen para la mano de obra.
+  { concepto: "Mobiliario de cocina de gran superficie (Obramat, Ikea, Leroy), altos y bajos con encimera, montado", unidad: "ml", conMaterial: 580, soloMano: 190 },
+  // El montaje suele tener un mínimo: una cocina de 3 ml no se monta en un rato.
+  // soloMano en null: esta partida YA es solo mano de obra, no tiene material que
+  // descontar. Ponerle el mismo precio en las dos columnas rompía la regla de que
+  // sin material siempre sale más barato.
+  { concepto: "Montaje de cocina: mínimo de intervención (hasta 3 ml)", unidad: "pa", conMaterial: 550, soloMano: null },
   { concepto: "Mobiliario de cocina a medida de gama media-alta con encimera de compacto o porcelánico", unidad: "ml", conMaterial: 950, soloMano: 240 },
   { concepto: "Encimera de granito, compacto o porcelánico (solo encimera)", unidad: "ml", conMaterial: 290, soloMano: 90 },
 

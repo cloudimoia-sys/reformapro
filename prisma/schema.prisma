@@ -78,6 +78,9 @@ model Empresa {
   tel           String            @default("")
   email         String
   ivaDefecto    Int               @default(10)
+  /// Gastos generales y beneficio industrial en %, sobre la base del presupuesto.
+  /// 0 = no se aplica ninguno, que es como funcionaba antes de existir el campo.
+  margenDefecto Float             @default(0)
   /// Logo en base64 (data URL), opcional. Solo se muestra en las facturas si está puesto.
   logo          String?
   plan          PlanSuscripcion   @default(PRUEBA)
@@ -192,6 +195,9 @@ model Presupuesto {
   titulo     String
   fecha      DateTime           @default(now())
   iva        Int                @default(10)
+  /// Margen de este presupuesto en %. Se copia del de la empresa al crearlo, para
+  /// poder subirlo o bajarlo en una obra concreta sin tocar la configuración.
+  margen     Float              @default(0)
   estado     EstadoPresupuesto  @default(BORRADOR)
   notas      String?
   firma      String?
