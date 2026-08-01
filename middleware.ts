@@ -11,6 +11,7 @@ export const config = {
     "/catalogo/:path*",
     "/presupuestos/:path*",
     "/informes/:path*",
+    "/copiloto/:path*",
     "/facturas/:path*",
     "/equipo/:path*",
     "/empresa/:path*",
@@ -19,5 +20,6 @@ export const config = {
     "/api/generar-presupuesto",
     "/api/generar-informe",
     "/api/leer-plano",
+    "/api/copiloto",
   ],
 };

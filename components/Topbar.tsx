@@ -10,6 +10,7 @@ const TABS: [string, string][] = [
   ["/catalogo", "Catálogo"],
   ["/presupuestos", "Presupuestos"],
   ["/informes", "Informes"],
+  ["/copiloto", "Copiloto"],
 ];
 
 const TABS_ADMIN: [string, string][] = [
