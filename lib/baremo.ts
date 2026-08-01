@@ -73,7 +73,24 @@ export const BAREMO: PrecioReferencia[] = [
   { concepto: "Puerta de entrada blindada", unidad: "ud", conMaterial: 1100, soloMano: 180 },
   { concepto: "Persiana de aluminio con aislamiento", unidad: "m²", conMaterial: 110, soloMano: 40 },
   { concepto: "Armario empotrado con interior forrado", unidad: "ml", conMaterial: 480, soloMano: 140 },
-  { concepto: "Mobiliario de cocina con encimera", unidad: "ml", conMaterial: 950, soloMano: 220 },
+  // Separado por gama: la horquilla del mobiliario de cocina es enorme y usar un
+  // precio único descuadra el presupuesto entero. En una cocina, los muebles son
+  // el 60-70% del total, así que equivocarse aquí se nota más que en nada.
+  // Medido en un presupuesto real: 6 ml a 1.100 €/ml daban 6.600 € sobre 8.986 €
+  // totales, con un mobiliario de gama básica de gran superficie.
+  { concepto: "Mobiliario de cocina de gran superficie (Obramat, Ikea, Leroy), altos y bajos con encimera", unidad: "ml", conMaterial: 420, soloMano: 190 },
+  { concepto: "Mobiliario de cocina a medida de gama media-alta con encimera de compacto o porcelánico", unidad: "ml", conMaterial: 950, soloMano: 240 },
+  { concepto: "Encimera de granito, compacto o porcelánico (solo encimera)", unidad: "ml", conMaterial: 290, soloMano: 90 },
+
+  // Electrodomésticos y aparatos: si el usuario los nombra hay que valorarlos, o
+  // decir expresamente que los aporta él.
+  { concepto: "Horno empotrable de marca (Balay, Bosch y similares)", unidad: "ud", conMaterial: 420, soloMano: 55 },
+  { concepto: "Placa vitrocerámica o de inducción", unidad: "ud", conMaterial: 390, soloMano: 55 },
+  { concepto: "Campana extractora con salida a conducto", unidad: "ud", conMaterial: 320, soloMano: 90 },
+  { concepto: "Fregadero con grifería monomando", unidad: "ud", conMaterial: 340, soloMano: 110 },
+  { concepto: "Sistema de extracción de humos con conducto y sombrerete", unidad: "ud", conMaterial: 480, soloMano: 250 },
+  { concepto: "Papel pintado colocado", unidad: "m²", conMaterial: 28, soloMano: 16 },
+  { concepto: "Enlucido de pasta niveladora y pintura antihumedad", unidad: "m²", conMaterial: 16, soloMano: 12 },
 
   // Exteriores
   { concepto: "Urbanización exterior: acceso, acera perimetral y cerramiento", unidad: "m²", conMaterial: 65, soloMano: 42 },

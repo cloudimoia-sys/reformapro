@@ -3,7 +3,7 @@ import { requireTenant } from "@/lib/session";
 import { llamarAGemini, respuestaDeError, leerJson, extraerLista } from "@/lib/gemini";
 import { normalizarUnidad } from "@/lib/unidades";
 import { aplicarCatalogo } from "@/lib/coincidencia";
-import { revisarMediciones } from "@/lib/revision";
+import { revisarMediciones, faltanElementosPedidos } from "@/lib/revision";
 import { bloqueBaremo } from "@/lib/baremo";
 import { normalizarIndirectos } from "@/lib/indirectos";
 import { listaObligatoria, bloqueObligatorias, faltan } from "@/lib/completitud";
@@ -175,6 +175,9 @@ ${reglaSinMateriales}${reglaPlano}- CIÑE EL PRESUPUESTO A LO QUE PIDEN. Presupu
 - MANDAN LOS DETALLES SOBRE EL TIPO DE OBRA. El tipo es solo la familia del trabajo; lo que hay que hacer está en los detalles. Si el tipo dice "Baño completo" pero los detalles piden únicamente alicatar el suelo, presupuesta SOLO eso: nada de fontanería, sanitarios ni electricidad.
 - LA SUPERFICIE INDICADA ES LA MEDICIÓN DEL TRABAJO. Si piden alicatar 4 m², son 4 m² de alicatado, no la superficie de la estancia. Solo conviertes de suelo a paredes cuando el trabajo abarca la estancia entera (un baño completo, una reforma integral) y, si lo haces, escribe el cálculo en la descripción ("perímetro 8 m × 2,5 m de altura"). Nunca multipliques la medición que te han dado sin decir por qué.
 - LA PINTURA NO SE MIDE POR LA SUPERFICIE DE SUELO. Se pintan las DOS caras de cada tabique, el perímetro interior de fachada y los techos: en una vivienda sale en torno a 4,5-5,5 veces la superficie construida. Para 68 m² construidos son unos 320-370 m² de pintura, no 220. El mismo criterio vale para enlucidos y falsos techos.
+- EL PRODUCTO CONCRETO MANDA SOBRE EL SELECTOR DE CALIDAD. Si nombran una marca, un proveedor o un modelo ("mobiliario Obramat modelo Madrid", "placa Balay", "gres de 60x60"), presupuesta ESE producto y su precio real, aunque la calidad seleccionada diga otra cosa. El selector es una orientación para lo que no está especificado; lo nombrado es un dato. Si el producto nombrado es de gran superficie, no lo cobres a precio de cocina a medida.
+- SI TE DAN LA MEDICIÓN, ÚSALA. Cuando los detalles dicen "4 metros de tubería" o "3 tomas de agua", eso son 4 ml y 3 ud, cada uno en su partida. No lo conviertas en una partida alzada: una alzada sin medición es donde luego aparecen los modificados y las discusiones con el cliente.
+- TODO LO QUE TE NOMBREN TIENE QUE APARECER. Si mencionan un horno, una campana, una placa, un fregadero o una grifería, cada uno lleva su partida. Si el cliente los aporta, escríbelo en la descripción ("aparato aportado por la propiedad") y presupuesta solo la colocación. Lo que no puede pasar es que un aparato que te han nombrado no salga por ninguna parte: quien lee el presupuesto da por hecho que va incluido.
 - CANTIDADES REALISTAS, Y NUNCA UNA SUPERFICIE COMO NÚMERO DE UNIDADES. Lo que se mide en "ud" lleva las unidades que de verdad hay: un plato de ducha, un inodoro, un lavabo, una mampara son 1 ud en un baño normal. Un "15 ud" de plato de ducha significa quince platos de ducha y es un disparate. Si dudas entre medir en ud o en m², elige la que corresponda al trabajo y ajusta el precio unitario a esa unidad.
 - Mediciones coherentes con la superficie indicada. Si no la dan, estima una razonable para el tipo de obra y dilo en la descripción.
 - La herramienta de uso general (radial, taladro, borriquetas) va incluida en el precio de cada partida, no como línea aparte. En "Maquinaria y medios auxiliares" solo va lo que se alquila o es específico de esta obra.
@@ -248,6 +251,15 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
     for (const o of faltan(obligatorias, finales)) {
       avisos.push(`Falta "${o.nombre}"${o.motivo ? `: ${o.motivo}` : ""}.`);
     }
+
+    // Lo que el usuario nombro y no acabo en ninguna partida. Es el hueco mas
+    // caro: un horno o una campana que nadie presupuesto pero el cliente espera.
+    avisos.push(
+      ...faltanElementosPedidos(
+        `${f.detalles || ""} ${f.estancias || ""}`,
+        finales.map((l: any) => ({ concepto: l.concepto, descripcion: l.descripcion }))
+      )
+    );
 
     return NextResponse.json({ lineas: finales, partidasPropiasAplicadas: aplicadas, avisos });
   } catch (e: any) {
