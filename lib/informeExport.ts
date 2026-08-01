@@ -2,7 +2,14 @@
 
 import * as XLSX from "xlsx";
 import { eur } from "@/lib/format";
-import { importePartida, pem, desglosePresupuesto, ETIQUETA_TIPO, type ContenidoInforme, type TipoInforme } from "@/lib/informe";
+import {
+  importePartida,
+  desglosePresupuesto,
+  porCapitulos,
+  ETIQUETA_TIPO,
+  type ContenidoInforme,
+  type TipoInforme,
+} from "@/lib/informe";
 import type { EmpresaDoc, ClienteDoc } from "@/lib/docExport";
 
 export type InformeDoc = {
@@ -25,12 +32,40 @@ function esc(s: string) {
   return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** Respeta los saltos de línea del texto redactado, que llega en texto plano. */
+/**
+ * Etiquetas de informe técnico que van resaltadas al principio de su línea.
+ *
+ * Sin esto, "Ubicación: ... Patología: ... Causa origen: ..." salía todo seguido
+ * en un párrafo corrido y no había forma de leerlo de un vistazo. Un informe se
+ * consulta buscando el dato concreto, no se lee de corrido.
+ */
+const ETIQUETAS =
+  /^(Ubicación|Ubicacion|Patología|Patologia|Efectos colaterales|Efectos|Causa origen|Causa|Evolución previsible|Evolución|Evolucion|Riesgo estructural|Riesgo físico|Riesgo concreto|Riesgo|Pérdida de capacidad portante|Justificación|Justificacion|Apeo preventivo|Saneado e inhibición|Saneado|Regeneración base|Alcance|Metodología|Observaciones|Conclusión|NIVEL DE GRAVEDAD)\s*:/i;
+
+/**
+ * Convierte el texto plano en párrafos legibles.
+ *
+ * Una línea del tipo "Etiqueta: contenido" se pinta con la etiqueta en negrita y
+ * sangría francesa, para que al hojear el informe se encuentre el dato buscado.
+ * El nivel de gravedad, además, va destacado: es lo primero que mira quien lee.
+ */
 function parrafos(texto: string) {
   return esc(texto)
     .split(/\n+/)
-    .filter((p) => p.trim())
-    .map((p) => `<p style="text-align:justify;margin:0 0 8px">${p}</p>`)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => {
+      const m = p.match(ETIQUETAS);
+      if (!m) return `<p style="text-align:justify;margin:0 0 8px">${p}</p>`;
+
+      const etiqueta = p.slice(0, m[0].length).replace(/:\s*$/, "");
+      const resto = p.slice(m[0].length).trim();
+      const gravedad = /NIVEL DE GRAVEDAD/i.test(etiqueta);
+
+      return `<p style="text-align:justify;margin:0 0 5px;padding-left:14px;text-indent:-14px${
+        gravedad ? ";font-size:13px" : ""
+      }"><b>${etiqueta}:</b> ${gravedad ? `<b>${resto}</b>` : resto}</p>`;
+    })
     .join("");
 }
 
@@ -40,6 +75,18 @@ function parrafos(texto: string) {
  *   se imprimía tal cual: el informe entregado salía con `TOC \\o "1-2" \\h \\z \\u`
  *   escrito en medio de la página. Pasó en un informe real.
  */
+/**
+ * Nombre del capítulo a partir de la primera partida que lo abre.
+ *
+ * La IA no da un título de capítulo aparte, así que se toma la primera partida y
+ * se recorta por la primera coma o paréntesis: "Apuntalamiento de forjado con
+ * puntales metálicos y tablones" queda como "Apuntalamiento de forjado".
+ */
+function nombreCapitulo(primeraDescripcion: string) {
+  const corte = primeraDescripcion.split(/[,(]/)[0].trim();
+  return (corte.length > 12 ? corte : primeraDescripcion).slice(0, 70).toUpperCase();
+}
+
 function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc, paraWord: boolean) {
   const { apartados, partidas, dictamen } = inf.contenido;
   const desglose = desglosePresupuesto(partidas);
@@ -88,19 +135,41 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc, para
     })
     .join("");
 
+  /**
+   * El presupuesto va agrupado por capítulos, con su fila de cabecera y su
+   * subtotal, como cualquier presupuesto de obra. Una lista plana de quince
+   * partidas seguidas no deja ver de dónde sale el dinero.
+   */
+  const grupos = porCapitulos(partidas);
   const filas = partidas.length
-    ? partidas
-        .map(
-          (p) => `
-      <tr>
+    ? grupos
+        .map((g) => {
+          const titulo = g.lineas[0]?.descripcion || "";
+          const lineas = g.lineas
+            .map(
+              (p) => `
+      <tr${p.opcional ? ' style="color:#444"' : ""}>
         <td>${esc(p.codigo)}</td>
-        <td>${esc(p.descripcion)}</td>
+        <td>${p.opcional ? "<i>Opcional:</i> " : ""}${esc(p.descripcion)}</td>
         <td style="text-align:center">${esc(p.unidad)}</td>
         <td style="text-align:right">${p.cantidad}</td>
         <td style="text-align:right">${eur(p.precio)}</td>
         <td style="text-align:right">${eur(importePartida(p))}</td>
       </tr>`
-        )
+            )
+            .join("");
+
+          return `
+      <tr style="background:#f2f2f2">
+        <td><b>${esc(g.codigo)}</b></td>
+        <td colspan="5"><b>${esc(nombreCapitulo(titulo))}</b></td>
+      </tr>${lineas}
+      <tr>
+        <td></td>
+        <td colspan="4" style="text-align:right;font-size:10px">Subtotal capítulo ${esc(g.codigo)}${g.subtotalOpcional ? " (sin opcionales)" : ""}</td>
+        <td style="text-align:right;font-size:10px"><b>${eur(g.subtotal)}</b></td>
+      </tr>`;
+        })
         .join("")
     : `<tr><td colspan="6">No se valoran partidas en este informe.</td></tr>`;
 
@@ -164,6 +233,18 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc, para
     </tr></tfoot>
   </table>
 
+  <h3 style="font-size:13px;margin:14px 0 4px;mso-outline-level:2">Resumen por capítulos</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:11px">
+    ${grupos
+      .map(
+        (g) => `<tr>
+      <td style="padding:3px 4px">Capítulo ${esc(g.codigo)} · ${esc(nombreCapitulo(g.lineas[0]?.descripcion || ""))}</td>
+      <td style="padding:3px 4px;text-align:right;width:110px">${eur(g.subtotal)}</td>
+    </tr>`
+      )
+      .join("")}
+  </table>
+
   <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:10px">
     <tr><td style="padding:3px 4px;text-align:right">Gastos generales (${desglose.porcentajeGG} %)</td><td style="padding:3px 4px;text-align:right;width:110px">${eur(desglose.gastosGenerales)}</td></tr>
     <tr><td style="padding:3px 4px;text-align:right">Beneficio industrial (${desglose.porcentajeBI} %)</td><td style="padding:3px 4px;text-align:right">${eur(desglose.beneficio)}</td></tr>
@@ -171,6 +252,19 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc, para
     <tr><td style="padding:3px 4px;text-align:right">IVA (${desglose.iva} %)</td><td style="padding:3px 4px;text-align:right">${eur(desglose.importeIva)}</td></tr>
     <tr><td style="padding:6px 4px;text-align:right;border-top:2px solid #111;font-size:14px"><b>TOTAL PARA EL CLIENTE</b></td><td style="padding:6px 4px;text-align:right;border-top:2px solid #111;font-size:14px"><b>${eur(desglose.total)}</b></td></tr>
   </table>
+
+  ${
+    desglose.hayOpcionales
+      ? `<table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:8px;color:#444">
+    <tr><td style="padding:3px 4px;text-align:right">Partidas opcionales (ejecución material)</td><td style="padding:3px 4px;text-align:right;width:110px">${eur(desglose.opcional)}</td></tr>
+    <tr><td style="padding:3px 4px;text-align:right"><b>Total si se incluyen las opcionales</b></td><td style="padding:3px 4px;text-align:right"><b>${eur(desglose.totalConOpcional)}</b></td></tr>
+  </table>
+  <p style="font-size:10px;color:#555;margin-top:2px">
+    Las partidas marcadas como opcionales son mejoras recomendables que no son necesarias para resolver la
+    patología descrita. No están incluidas en el total anterior.
+  </p>`
+      : ""
+  }
   <p style="font-size:10px;color:#555;margin-top:4px">
     Valoración orientativa a precios de mercado, sujeta a comprobación una vez abiertas las catas y descubiertos
     los elementos afectados. No constituye oferta contractual.
@@ -211,7 +305,7 @@ export function exportInformePDF(inf: InformeDoc, cliente: ClienteDoc, empresa: 
  */
 export function exportInformeExcel(inf: InformeDoc) {
   const { partidas, apartados, dictamen } = inf.contenido;
-  const total = pem(partidas);
+  const desglose = desglosePresupuesto(partidas);
 
   const filas = [
     ["Informe", inf.numero],
@@ -220,9 +314,28 @@ export function exportInformeExcel(inf: InformeDoc) {
     ["Fecha", inf.fecha],
     [],
     ["Cód.", "Descripción de la partida", "Ud.", "Cantidad", "Precio", "Importe"],
-    ...partidas.map((p) => [p.codigo, p.descripcion, p.unidad, p.cantidad, p.precio, importePartida(p)]),
+    ...partidas.map((p) => [
+      p.codigo,
+      (p.opcional ? "OPCIONAL · " : "") + p.descripcion,
+      p.unidad,
+      p.cantidad,
+      p.precio,
+      importePartida(p),
+    ]),
     [],
-    ["", "", "", "", "TOTAL EJECUCIÓN MATERIAL", total],
+    ["", "", "", "", "Ejecución material (sin opcionales)", desglose.ejecucionMaterial],
+    ["", "", "", "", `Gastos generales (${desglose.porcentajeGG} %)`, desglose.gastosGenerales],
+    ["", "", "", "", `Beneficio industrial (${desglose.porcentajeBI} %)`, desglose.beneficio],
+    ["", "", "", "", "Ejecución por contrata", desglose.contrata],
+    ["", "", "", "", `IVA (${desglose.iva} %)`, desglose.importeIva],
+    ["", "", "", "", "TOTAL PARA EL CLIENTE", desglose.total],
+    ...(desglose.hayOpcionales
+      ? [
+          [],
+          ["", "", "", "", "Partidas opcionales (ejecución material)", desglose.opcional],
+          ["", "", "", "", "TOTAL CON OPCIONALES", desglose.totalConOpcional],
+        ]
+      : []),
   ];
   const hojaPres = XLSX.utils.aoa_to_sheet(filas);
   hojaPres["!cols"] = [{ wch: 10 }, { wch: 64 }, { wch: 7 }, { wch: 11 }, { wch: 12 }, { wch: 14 }];

@@ -10,6 +10,7 @@
  */
 import { normalizarIndirectos, type LineaIndirecta } from "../lib/indirectos";
 import { BAREMO } from "../lib/baremo";
+import { desglosePresupuesto, porCapitulos, type PartidaInforme } from "../lib/informe";
 
 const total = (ls: LineaIndirecta[]) => ls.reduce((s, l) => s + l.cantidad * l.precio, 0);
 
@@ -69,6 +70,32 @@ const obraGrande: LineaIndirecta[] = [
 const seg = normalizarIndirectos(obraGrande).lineas.find((l) => /seguridad/i.test(l.concepto))!;
 if (seg.precio <= 30) mal("indirectos proporcionales", `una obra de 15.200 € lleva ${seg.precio} € de seguridad`);
 else bien(`indirectos proporcionales (obra de 15.200 € → ${seg.precio} € de seguridad y salud)`);
+
+// 5) Las partidas opcionales no inflan el total obligatorio.
+//
+// Es lo que decide el cliente: si una mejora recomendable se suma al total, la
+// cifra sale más alta de lo necesario y el presupuesto se cae por precio.
+const partidas: PartidaInforme[] = [
+  { codigo: "01.01", descripcion: "Tratamiento de dinteles", unidad: "ud", cantidad: 4, precio: 390 },
+  { codigo: "03.01", descripcion: "Sellado de juntas", unidad: "m", cantidad: 12, precio: 66 },
+  { codigo: "03.02", descripcion: "Revestimiento protector del techo", unidad: "m²", cantidad: 25, precio: 38, opcional: true },
+];
+const d = desglosePresupuesto(partidas);
+
+if (Math.abs(d.ejecucionMaterial - (1560 + 792)) > 0.01) {
+  mal("partidas opcionales", `el PEM (${d.ejecucionMaterial} €) incluye la opcional`);
+} else bien(`el PEM excluye las opcionales (${d.ejecucionMaterial} €)`);
+
+if (Math.abs(d.opcional - 950) > 0.01) mal("importe opcional", `${d.opcional} € en vez de 950 €`);
+else bien("las opcionales se suman aparte (950 €)");
+
+if (d.totalConOpcional <= d.total) mal("total con opcionales", "no es mayor que el total sin ellas");
+else bien(`total con opcionales (${d.totalConOpcional.toFixed(2)} €) mayor que sin ellas (${d.total.toFixed(2)} €)`);
+
+// Los subtotales por capítulo tampoco cuentan lo opcional.
+const cap03 = porCapitulos(partidas).find((g) => g.codigo === "03")!;
+if (Math.abs(cap03.subtotal - 792) > 0.01) mal("subtotal de capítulo", `${cap03.subtotal} € en vez de 792 €`);
+else bien("los subtotales por capítulo excluyen las opcionales (792 €)");
 
 console.log("");
 if (fallos) {

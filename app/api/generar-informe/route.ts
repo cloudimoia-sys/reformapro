@@ -96,7 +96,14 @@ ${guionDe(tipo)}
 REGLAS DE REDACCIÓN
 - Describe SOLO lo que se sostenga en los datos aportados o se aprecie en las imágenes. Cuando algo no conste, escribe "no consta" o "no se ha podido determinar con los datos disponibles". Es preferible a inventarlo: este documento puede acabar ante un juez.
 - Cuando una afirmación se apoye en una imagen, cítala como (Imagen 2). No cites imágenes que no existan.
-- Para cada lesión: qué es, dónde está, qué la ha causado y cómo evolucionará si no se interviene.
+- FORMATO DE LOS TEXTOS: usa etiquetas al principio de línea y un SALTO DE LÍNEA entre cada una. Nunca encadenes las etiquetas en un párrafo corrido. Para cada lesión, exactamente así:
+Ubicación: dónde está.
+Patología: qué le pasa al elemento.
+Efectos colaterales: qué provoca en lo que tiene alrededor.
+Causa origen: por qué ha pasado.
+Evolución previsible: qué ocurrirá si no se interviene.
+- En la valoración de riesgos, la primera línea es siempre "NIVEL DE GRAVEDAD: BAJO|MODERADO|ALTO|MUY ALTO (motivo entre paréntesis)" y debajo, en líneas aparte, el riesgo concreto.
+- En la propuesta de actuación, cada fase lleva su propio subapartado, y dentro los trabajos van uno por línea con su etiqueta ("Apeo preventivo: ...", "Saneado: ...").
 - Gradúa la gravedad con criterio estructural: MUY ALTO solo si hay riesgo de colapso o pérdida de capacidad portante.
 - Propón soluciones constructivas concretas y ejecutables, con su justificación técnica (por qué esa y no otra).
 - EL PRESUPUESTO TIENE QUE CUBRIR LA PROPUESTA ENTERA. Repasa las fases que has escrito y comprueba que cada trabajo tiene su partida. Si propones reponer bovedillas, presupuesta la reposición, no solo el saneado.
@@ -105,13 +112,17 @@ ${tipo === "PERICIAL" ? `- El juramento y la declaración de tachas los añade e
 
 ${bloqueBaremo(false)}
 
-PARTIDAS: presupuesto de ejecución material de la reparación, con precios reales del mercado español actual. Incluye SIEMPRE seguridad y salud y gestión de residuos: son obligatorias en cualquier obra y su ausencia deja el presupuesto corto. Escribe todo en español, sin una sola palabra ni carácter de otro idioma. El precio es la unidad de obra completa (material, mano de obra y medios auxiliares). Códigos jerárquicos por capítulos: 01, 01.01, 01.02, 02, 02.01…
+PARTIDAS, POR CAPÍTULOS. Agrupa el presupuesto en capítulos de obra y numera en dos niveles: el capítulo es "01", "02", "03" y sus partidas "01.01", "01.02". Todas las partidas de un mismo elemento o fase van en el mismo capítulo.
+
+Marca con "opcional": true las mejoras recomendables que NO hacen falta para resolver la patología (por ejemplo, revestir y pintar todo un techo cuando solo se ha intervenido en una zona). Van al final de su capítulo. Lo obligatorio y lo opcional se suman por separado: si se mezclan, el cliente ve una cifra más alta de la necesaria y se echa atrás.
+
+Presupuesto de ejecución material de la reparación, con precios reales del mercado español actual. Incluye SIEMPRE seguridad y salud y gestión de residuos: son obligatorias en cualquier obra y su ausencia deja el presupuesto corto. Escribe todo en español, sin una sola palabra ni carácter de otro idioma. El precio es la unidad de obra completa (material, mano de obra y medios auxiliares). Códigos jerárquicos por capítulos: 01, 01.01, 01.02, 02, 02.01…
 
 Responde SOLO con JSON válido, sin markdown:
 {
  "titulo": "título del informe",
  "apartados": [{"numero":"1","titulo":"...","texto":"...","subapartados":[{"titulo":"...","texto":"..."}]}],
- "partidas": [{"codigo":"01.01","descripcion":"...","unidad":"ud|m|m²|m³|kg|pa","cantidad":1,"precio":0}],
+ "partidas": [{"codigo":"01.01","descripcion":"...","unidad":"ud|m|m²|m³|kg|pa","cantidad":1,"precio":0,"opcional":false}],
  "dictamen": "conclusión final, con la urgencia de la intervención"
 }
 "subapartados" solo cuando el apartado los necesite; si no, omítelo.`;
@@ -187,6 +198,7 @@ Responde SOLO con JSON válido, sin markdown:
         unidad: String(p.unidad ?? "ud").trim(),
         cantidad: Number(p.cantidad) || 0,
         precio: Number(p.precio) || 0,
+        opcional: p.opcional === true,
       }))
       .filter((p: any) => p.descripcion);
 

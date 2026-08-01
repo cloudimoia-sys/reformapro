@@ -27,7 +27,7 @@ export type InformeCompleto = {
   fotos: Foto[];
 };
 
-const PARTIDA_VACIA: PartidaInforme = { codigo: "", descripcion: "", unidad: "ud", cantidad: 1, precio: 0 };
+const PARTIDA_VACIA: PartidaInforme = { codigo: "", descripcion: "", unidad: "ud", cantidad: 1, precio: 0, opcional: false };
 
 export default function InformeEditor({
   informe,
@@ -213,6 +213,7 @@ export default function InformeEditor({
             <th style={{ width: 90 }}>Cantidad</th>
             <th style={{ width: 110 }}>Precio</th>
             <th style={{ width: 110 }}>Importe</th>
+            <th style={{ width: 74 }} title="Mejora recomendable que no hace falta para resolver la patología">Opcional</th>
             <th></th>
           </tr>
         </thead>
@@ -225,6 +226,21 @@ export default function InformeEditor({
               <td><input className="inp" type="number" step="0.01" value={p.cantidad} onChange={(e) => editarPartida(i, "cantidad", e.target.value)} onBlur={() => guardar({ contenido: inf.contenido })} /></td>
               <td><input className="inp" type="number" step="0.01" value={p.precio} onChange={(e) => editarPartida(i, "precio", e.target.value)} onBlur={() => guardar({ contenido: inf.contenido })} /></td>
               <td className="linetotal">{eur(importePartida(p))}</td>
+              <td style={{ textAlign: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={!!p.opcional}
+                  style={{ width: 18, height: 18 }}
+                  onChange={(e) => {
+                    // Marcar una partida como opcional la saca del total obligatorio
+                    // y la enseña aparte, para no inflar la cifra que decide el cliente.
+                    const partidas = inf.contenido.partidas.map((x, j) => (j === i ? { ...x, opcional: e.target.checked } : x));
+                    const c = { ...inf.contenido, partidas };
+                    editarContenido(c);
+                    guardar({ contenido: c });
+                  }}
+                />
+              </td>
               <td style={{ textAlign: "right" }}>
                 <button
                   className="btn sm red"
@@ -239,7 +255,7 @@ export default function InformeEditor({
             </tr>
           ))}
           {!inf.contenido.partidas.length && (
-            <tr><td colSpan={7} className="hint">Sin partidas valoradas.</td></tr>
+            <tr><td colSpan={8} className="hint">Sin partidas valoradas.</td></tr>
           )}
         </tbody>
       </table>
@@ -254,6 +270,11 @@ export default function InformeEditor({
         >+ Añadir partida</button>
         <div className="spacer" />
         <strong>Ejecución material: {eur(total)}</strong>
+        {inf.contenido.partidas.some((p) => p.opcional) && (
+          <span className="hint">
+            {" "}· opcionales aparte: {eur(pem(inf.contenido.partidas, true) - total)}
+          </span>
+        )}
       </div>
       <p className="hint">No incluye gastos generales, beneficio industrial ni IVA.</p>
 

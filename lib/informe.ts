@@ -16,7 +16,36 @@ export type PartidaInforme = {
   unidad: string;
   cantidad: number;
   precio: number;
+  /**
+   * Mejora recomendable que no hace falta para resolver la patología.
+   *
+   * Va aparte porque cambia la conversación con el cliente: el total obligatorio
+   * es lo que hay que hacer, y lo opcional se ofrece sin inflar esa cifra. Si se
+   * mezclan, el cliente ve un número más alto del necesario y se echa atrás.
+   */
+  opcional?: boolean;
 };
+
+/** Capítulo del presupuesto: "01.01" pertenece al capítulo "01". */
+export function capituloDe(codigo: string) {
+  return (codigo || "").split(".")[0] || "01";
+}
+
+/** Agrupa las partidas por capítulo conservando el orden de aparición. */
+export function porCapitulos(partidas: PartidaInforme[]) {
+  const grupos = new Map<string, PartidaInforme[]>();
+  for (const p of partidas) {
+    const c = capituloDe(p.codigo);
+    if (!grupos.has(c)) grupos.set(c, []);
+    grupos.get(c)!.push(p);
+  }
+  return [...grupos.entries()].map(([codigo, lineas]) => ({
+    codigo,
+    lineas,
+    subtotal: lineas.filter((l) => !l.opcional).reduce((s, l) => s + importePartida(l), 0),
+    subtotalOpcional: lineas.filter((l) => l.opcional).reduce((s, l) => s + importePartida(l), 0),
+  }));
+}
 
 /** Un apartado del informe: título y cuerpo, más subapartados si los lleva. */
 export type Apartado = {
@@ -38,9 +67,16 @@ export function importePartida(p: PartidaInforme) {
   return (Number(p.cantidad) || 0) * (Number(p.precio) || 0);
 }
 
-/** Presupuesto de ejecución material: la suma de las partidas, sin GG, BI ni IVA. */
-export function pem(partidas: PartidaInforme[]) {
-  return partidas.reduce((s, p) => s + importePartida(p), 0);
+/**
+ * Presupuesto de ejecución material, sin GG, BI ni IVA.
+ *
+ * Por defecto NO cuenta las partidas opcionales: la cifra que se compara y se
+ * decide es la de lo necesario. Lo opcional se enseña aparte.
+ */
+export function pem(partidas: PartidaInforme[], incluirOpcionales = false) {
+  return partidas
+    .filter((p) => incluirOpcionales || !p.opcional)
+    .reduce((s, p) => s + importePartida(p), 0);
 }
 
 /**
@@ -67,6 +103,13 @@ export function desglosePresupuesto(partidas: PartidaInforme[], iva = 10) {
   const beneficio = ejecucionMaterial * BENEFICIO_INDUSTRIAL;
   const contrata = ejecucionMaterial + gastosGenerales + beneficio;
   const importeIva = contrata * (iva / 100);
+
+  // Lo opcional se calcula por separado y con los mismos porcentajes, para poder
+  // enseñar "sin opcionales" y "con opcionales" sin que el cliente tenga que
+  // sumar nada de cabeza.
+  const opcional = pem(partidas, true) - ejecucionMaterial;
+  const contrataConOpcional = (ejecucionMaterial + opcional) * (1 + GASTOS_GENERALES + BENEFICIO_INDUSTRIAL);
+
   return {
     ejecucionMaterial,
     gastosGenerales,
@@ -77,6 +120,9 @@ export function desglosePresupuesto(partidas: PartidaInforme[], iva = 10) {
     total: contrata + importeIva,
     porcentajeGG: GASTOS_GENERALES * 100,
     porcentajeBI: BENEFICIO_INDUSTRIAL * 100,
+    hayOpcionales: opcional > 0,
+    opcional,
+    totalConOpcional: contrataConOpcional * (1 + iva / 100),
   };
 }
 
