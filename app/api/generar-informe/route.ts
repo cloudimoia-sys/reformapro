@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/session";
 import { llamarAGemini, respuestaDeError, leerJson, extraerLista, type Parte } from "@/lib/gemini";
 import { guionDe, JURAMENTO, DECLARACION_TACHAS, type TipoInforme } from "@/lib/informe";
-import { textoSospechoso } from "@/lib/revision";
+import { textoSospechoso, faltanReposiciones } from "@/lib/revision";
+import { normalizarIndirectos } from "@/lib/indirectos";
+import { bloqueBaremo } from "@/lib/baremo";
 
 export const maxDuration = 60;
 
@@ -97,7 +99,11 @@ REGLAS DE REDACCIÓN
 - Para cada lesión: qué es, dónde está, qué la ha causado y cómo evolucionará si no se interviene.
 - Gradúa la gravedad con criterio estructural: MUY ALTO solo si hay riesgo de colapso o pérdida de capacidad portante.
 - Propón soluciones constructivas concretas y ejecutables, con su justificación técnica (por qué esa y no otra).
+- EL PRESUPUESTO TIENE QUE CUBRIR LA PROPUESTA ENTERA. Repasa las fases que has escrito y comprueba que cada trabajo tiene su partida. Si propones reponer bovedillas, presupuesta la reposición, no solo el saneado.
+- TODO LO QUE SE PICA SE REPONE. Detrás de cada demolición, picado o retirada van sus partidas de reposición y acabado: reponer el elemento, enfoscar, enlucir y pintar. Un presupuesto que abre la obra y no la cierra deja al cliente con el techo abierto y al reformista pagando la diferencia.
 ${tipo === "PERICIAL" ? `- El juramento y la declaración de tachas los añade el sistema: no los redactes ni los resumas.\n- Delimita el ALCANCE con honestidad: di expresamente qué no se ha podido comprobar (sin catas, sin acceso, sin proyecto). Un informe que no acota su alcance se vuelve en contra del perito.\n` : ""}- No redactes el apartado económico como texto: rellena "partidas".
+
+${bloqueBaremo(false)}
 
 PARTIDAS: presupuesto de ejecución material de la reparación, con precios reales del mercado español actual. Incluye SIEMPRE seguridad y salud y gestión de residuos: son obligatorias en cualquier obra y su ausencia deja el presupuesto corto. Escribe todo en español, sin una sola palabra ni carácter de otro idioma. El precio es la unidad de obra completa (material, mano de obra y medios auxiliares). Códigos jerárquicos por capítulos: 01, 01.01, 01.02, 02, 02.01…
 
@@ -184,6 +190,23 @@ Responde SOLO con JSON válido, sin markdown:
       }))
       .filter((p: any) => p.descripcion);
 
+    /**
+     * Los indirectos del informe pasan por el mismo cálculo por porcentaje que
+     * los del presupuesto. Sin esto salían a ojo: en un informe real, seguridad
+     * y salud (200 €) más gestión de residuos (250 €) sumaban 450 € sobre 1.397 €
+     * de obra, un 32%.
+     */
+    const partidasFinales = normalizarIndirectos(
+      partidas.map((p: any) => ({
+        capitulo: "",
+        concepto: p.descripcion,
+        descripcion: p.descripcion,
+        cantidad: p.cantidad,
+        unidad: p.unidad,
+        precio: p.precio,
+      }))
+    ).lineas.map((l: any, i: number) => ({ ...partidas[i], cantidad: l.cantidad, unidad: l.unidad, precio: l.precio }));
+
     const dictamen = String(parsed.dictamen || "").trim();
 
     /**
@@ -199,16 +222,16 @@ Responde SOLO con JSON válido, sin markdown:
     avisos.push(
       ...textoSospechoso([
         ...apartados.map((a: any) => ({ donde: `Apartado ${a.numero}`, texto: `${a.titulo} ${a.texto}` })),
-        ...partidas.map((p: any) => ({ donde: `Partida ${p.codigo || p.descripcion.slice(0, 20)}`, texto: p.descripcion })),
+        ...partidasFinales.map((p: any) => ({ donde: `Partida ${p.codigo || p.descripcion.slice(0, 20)}`, texto: p.descripcion })),
         { donde: "Dictamen", texto: dictamen },
       ])
     );
 
-    const textoPartidas = JSON.stringify(partidas).toLowerCase();
-    if (partidas.length && !/seguridad|salud|epi/.test(textoPartidas)) {
+    const textoPartidas = JSON.stringify(partidasFinales).toLowerCase();
+    if (partidasFinales.length && !/seguridad|salud|epi/.test(textoPartidas)) {
       avisos.push("El presupuesto no incluye seguridad y salud, que es obligatoria en toda obra.");
     }
-    if (partidas.length && !/residuo|escombro|vertedero|contenedor/.test(textoPartidas)) {
+    if (partidasFinales.length && !/residuo|escombro|vertedero|contenedor/.test(textoPartidas)) {
       avisos.push("El presupuesto no incluye gestión de residuos.");
     }
 
@@ -221,9 +244,15 @@ Responde SOLO con JSON válido, sin markdown:
       );
     }
 
+    // Lo que se pica y no se repone: el hueco mas caro de un presupuesto de
+    // reparacion, porque es trabajo que hay que hacer si o si.
+    avisos.push(
+      ...faltanReposiciones(partidasFinales.map((p: any) => ({ concepto: p.descripcion, descripcion: p.descripcion })))
+    );
+
     return NextResponse.json({
       titulo: String(parsed.titulo || "").trim() || "Informe técnico",
-      contenido: { apartados, partidas, dictamen },
+      contenido: { apartados, partidas: partidasFinales, dictamen },
       vacios,
       avisos,
     });

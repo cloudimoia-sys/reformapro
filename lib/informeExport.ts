@@ -2,7 +2,7 @@
 
 import * as XLSX from "xlsx";
 import { eur } from "@/lib/format";
-import { importePartida, pem, ETIQUETA_TIPO, type ContenidoInforme, type TipoInforme } from "@/lib/informe";
+import { importePartida, pem, desglosePresupuesto, ETIQUETA_TIPO, type ContenidoInforme, type TipoInforme } from "@/lib/informe";
 import type { EmpresaDoc, ClienteDoc } from "@/lib/docExport";
 
 export type InformeDoc = {
@@ -42,7 +42,7 @@ function parrafos(texto: string) {
  */
 function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc, paraWord: boolean) {
   const { apartados, partidas, dictamen } = inf.contenido;
-  const total = pem(partidas);
+  const desglose = desglosePresupuesto(partidas);
 
   const entradas = [
     ...apartados.map((a) => `${esc(a.numero)}. ${esc(a.titulo)}`),
@@ -159,12 +159,21 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc, para
     </tr></thead>
     <tbody>${filas}</tbody>
     <tfoot><tr>
-      <td colspan="5" style="text-align:right"><b>TOTAL EJECUCIÓN MATERIAL</b></td>
-      <td style="text-align:right"><b>${eur(total)}</b></td>
+      <td colspan="5" style="text-align:right"><b>PRESUPUESTO DE EJECUCIÓN MATERIAL</b></td>
+      <td style="text-align:right"><b>${eur(desglose.ejecucionMaterial)}</b></td>
     </tr></tfoot>
   </table>
+
+  <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:10px">
+    <tr><td style="padding:3px 4px;text-align:right">Gastos generales (${desglose.porcentajeGG} %)</td><td style="padding:3px 4px;text-align:right;width:110px">${eur(desglose.gastosGenerales)}</td></tr>
+    <tr><td style="padding:3px 4px;text-align:right">Beneficio industrial (${desglose.porcentajeBI} %)</td><td style="padding:3px 4px;text-align:right">${eur(desglose.beneficio)}</td></tr>
+    <tr><td style="padding:3px 4px;text-align:right;border-top:1px solid #999"><b>Presupuesto de ejecución por contrata</b></td><td style="padding:3px 4px;text-align:right;border-top:1px solid #999"><b>${eur(desglose.contrata)}</b></td></tr>
+    <tr><td style="padding:3px 4px;text-align:right">IVA (${desglose.iva} %)</td><td style="padding:3px 4px;text-align:right">${eur(desglose.importeIva)}</td></tr>
+    <tr><td style="padding:6px 4px;text-align:right;border-top:2px solid #111;font-size:14px"><b>TOTAL PARA EL CLIENTE</b></td><td style="padding:6px 4px;text-align:right;border-top:2px solid #111;font-size:14px"><b>${eur(desglose.total)}</b></td></tr>
+  </table>
   <p style="font-size:10px;color:#555;margin-top:4px">
-    Presupuesto de ejecución material. No incluye gastos generales, beneficio industrial ni IVA.
+    Valoración orientativa a precios de mercado, sujeta a comprobación una vez abiertas las catas y descubiertos
+    los elementos afectados. No constituye oferta contractual.
   </p>
 
   ${dictamen ? `<h2 style="font-size:15px;margin:18px 0 6px;border-bottom:1px solid #999;padding-bottom:3px;mso-outline-level:1">DICTAMEN</h2>${parrafos(dictamen)}` : ""}

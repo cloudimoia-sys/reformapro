@@ -85,9 +85,19 @@ export const BAREMO: PrecioReferencia[] = [
   { concepto: "Cerramiento de fachada de 1/2 pie con aislamiento y trasdosado", unidad: "m²", conMaterial: 92, soloMano: 62 },
   { concepto: "Revoco monocapa o revestimiento exterior con remates y vierteaguas", unidad: "m²", conMaterial: 32, soloMano: 24 },
   { concepto: "Trasdosado autoportante de placa de yeso con aislamiento", unidad: "m²", conMaterial: 42, soloMano: 30 },
-  { concepto: "Apeo y apuntalamiento", unidad: "ud", conMaterial: 160, soloMano: 140 },
-  { concepto: "Sustitución de vigueta", unidad: "ml", conMaterial: 130, soloMano: 95 },
-  { concepto: "Cargadero metálico en apertura de hueco", unidad: "ml", conMaterial: 150, soloMano: 90 },
+  // Trabajo estructural. Corregido al alza tras revisar un informe real: la app
+  // presupuestaba la sustitución de vigueta a 120 €/ml y un dintel nuevo a 180 €,
+  // cuando sustituir una vigueta obliga a apear, demoler el entrevigado a ambos
+  // lados, cortar y retirar la vieja, colocar la nueva, macizar y esperar
+  // fraguado. Es el trabajo más caro y delicado de una rehabilitación, y quedarse
+  // corto aquí es donde el reformista pierde dinero de verdad.
+  { concepto: "Apeo y apuntalamiento de forjado (montaje, alquiler y desmontaje)", unidad: "m²", conMaterial: 38, soloMano: 30 },
+  { concepto: "Sustitución de vigueta de forjado", unidad: "ml", conMaterial: 260, soloMano: 180 },
+  { concepto: "Refuerzo de vigueta con perfil metálico inferior", unidad: "ml", conMaterial: 210, soloMano: 130 },
+  { concepto: "Reposición de bovedillas y macizado de entrevigado", unidad: "m²", conMaterial: 68, soloMano: 46 },
+  { concepto: "Dintel metálico nuevo en hueco de ventana (con apeo y remates)", unidad: "ud", conMaterial: 450, soloMano: 280 },
+  { concepto: "Cargadero metálico en apertura de hueco", unidad: "ml", conMaterial: 300, soloMano: 180 },
+  { concepto: "Saneado de armadura corroída y pasivado con mortero R4", unidad: "ml", conMaterial: 85, soloMano: 62 },
 ];
 
 /**

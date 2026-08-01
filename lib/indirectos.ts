@@ -31,9 +31,13 @@ export type LineaIndirecta = {
  * valores altos de la horquilla porque en obra pequeña estos costes pesan más.
  */
 const PORCENTAJES: { patron: RegExp; porcentaje: number; minimo: number }[] = [
-  { patron: /seguridad|salud|epi|protecci[oó]n colectiva/i, porcentaje: 0.02, minimo: 30 },
-  { patron: /residuo|escombro|contenedor|vertedero|rcd/i, porcentaje: 0.03, minimo: 45 },
-  { patron: /control de calidad|ensayo/i, porcentaje: 0.01, minimo: 60 },
+  // Los mínimos son costes reales que no bajan por pequeña que sea la obra: los
+  // EPIs y la señalización se compran igual, y un contenedor de escombros cuesta
+  // 150-200 € aunque se llene a medias. Estaban en 30 y 45 € y dejaban un
+  // presupuesto que no pagaba ni el contenedor.
+  { patron: /seguridad|salud|epi|protecci[oó]n colectiva/i, porcentaje: 0.02, minimo: 60 },
+  { patron: /residuo|escombro|contenedor|vertedero|rcd/i, porcentaje: 0.03, minimo: 150 },
+  { patron: /control de calidad|ensayo/i, porcentaje: 0.01, minimo: 90 },
 ];
 
 /** Detecta las líneas cuyo importe pasa a calcularse, no a estimarse. */

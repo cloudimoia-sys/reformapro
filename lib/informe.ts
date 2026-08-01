@@ -43,6 +43,43 @@ export function pem(partidas: PartidaInforme[]) {
   return partidas.reduce((s, p) => s + importePartida(p), 0);
 }
 
+/**
+ * Porcentajes del presupuesto de contrata en obra española.
+ *
+ * 13% de gastos generales y 6% de beneficio industrial son los que fija la
+ * legislación de contratos públicos y los que se usan por costumbre en privada.
+ */
+const GASTOS_GENERALES = 0.13;
+const BENEFICIO_INDUSTRIAL = 0.06;
+
+/**
+ * Desglose desde el PEM hasta lo que de verdad paga el cliente.
+ *
+ * El informe solo enseñaba el PEM con una nota a pie diciendo que no incluía
+ * gastos generales, beneficio ni IVA. Un particular lee 2.048 € y entiende que
+ * eso es lo que le cuesta la obra, cuando en realidad son cerca de 2.700 €. La
+ * nota está bien, pero la cifra grande manda sobre la letra pequeña: es mejor
+ * enseñar las dos y que no haya sorpresa cuando llegue la factura.
+ */
+export function desglosePresupuesto(partidas: PartidaInforme[], iva = 10) {
+  const ejecucionMaterial = pem(partidas);
+  const gastosGenerales = ejecucionMaterial * GASTOS_GENERALES;
+  const beneficio = ejecucionMaterial * BENEFICIO_INDUSTRIAL;
+  const contrata = ejecucionMaterial + gastosGenerales + beneficio;
+  const importeIva = contrata * (iva / 100);
+  return {
+    ejecucionMaterial,
+    gastosGenerales,
+    beneficio,
+    contrata,
+    iva,
+    importeIva,
+    total: contrata + importeIva,
+    porcentajeGG: GASTOS_GENERALES * 100,
+    porcentajeBI: BENEFICIO_INDUSTRIAL * 100,
+  };
+}
+
 export const ETIQUETA_TIPO: Record<TipoInforme, string> = {
   PATOLOGIAS: "Informe técnico de patologías",
   PERICIAL: "Dictamen pericial",
