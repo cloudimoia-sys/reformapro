@@ -25,6 +25,9 @@ const PERMITIDO_PRISMA_UNSAFE = [
   // que ya viene autenticada en la sesión.
   "lib/session.ts",
   "lib/counter.ts", // upsert atómico con la empresa ya en la clave primaria
+  // Cuenta intentos por IP y por email para frenar fuerza bruta y abuso: son
+  // contadores globales de la plataforma, no datos de ninguna empresa.
+  "lib/limite.ts",
   "app/registro/actions.ts", // crea la empresa: aún no existe
   "app/recuperar/actions.ts", // recuperar contraseña: sin sesión todavía
   "app/restablecer/actions.ts",

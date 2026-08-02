@@ -1,10 +1,9 @@
 "use server";
 
-import { headers } from "next/headers";
-import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 import { prismaUnsafe } from "@/lib/prisma";
+import { anotarIntento, hashClave, ipDeLaPeticion, limpiarIntentosViejos } from "@/lib/limite";
 
 export type RegistroInput = {
   nombre: string;
@@ -26,17 +25,6 @@ const MAX_ALTAS_POR_IP_HORA = 3;
 /** Tope global de altas por hora: freno de mano ante una oleada de registros. */
 const MAX_ALTAS_GLOBAL_HORA = 30;
 
-/** Hash de la IP para poder contar altas sin guardar la IP en claro (RGPD). */
-function hashIp(ip: string) {
-  const sal = process.env.NEXTAUTH_SECRET ?? "reformapro";
-  return crypto.createHash("sha256").update(ip + sal).digest("hex");
-}
-
-function ipDeLaPeticion() {
-  const h = headers();
-  return h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "desconocida";
-}
-
 /** ¿Esta IP (o la plataforma entera) ha creado ya demasiadas empresas esta hora? */
 async function superaElLimite(ipHash: string) {
   const desde = new Date(Date.now() - 60 * 60 * 1000);
@@ -44,8 +32,8 @@ async function superaElLimite(ipHash: string) {
   // El contador vive en la base de datos y no en memoria: en Vercel cada función
   // serverless tiene su propia memoria, así que un contador local no contaría nada.
   const [deEstaIp, enTotal] = await Promise.all([
-    prismaUnsafe.registroIntento.count({ where: { ipHash, createdAt: { gte: desde } } }),
-    prismaUnsafe.registroIntento.count({ where: { createdAt: { gte: desde } } }),
+    prismaUnsafe.intento.count({ where: { tipo: "registro", ipHash, createdAt: { gte: desde } } }),
+    prismaUnsafe.intento.count({ where: { tipo: "registro", createdAt: { gte: desde } } }),
   ]);
 
   return deEstaIp >= MAX_ALTAS_POR_IP_HORA || enTotal >= MAX_ALTAS_GLOBAL_HORA;
@@ -84,7 +72,8 @@ export async function registrarEmpresa(data: RegistroInput): Promise<ResultadoRe
     return { ok: false, error: "La contraseña debe tener al menos 10 caracteres." };
   }
 
-  const ipHash = hashIp(ipDeLaPeticion());
+  await limpiarIntentosViejos();
+  const ipHash = hashClave(`registro:${ipDeLaPeticion()}`);
   if (await superaElLimite(ipHash)) {
     return { ok: false, error: "Se han creado demasiadas cuentas desde aquí. Prueba dentro de un rato." };
   }
@@ -121,7 +110,7 @@ export async function registrarEmpresa(data: RegistroInput): Promise<ResultadoRe
   // Se apunta AQUI, no antes: solo cuentan las altas conseguidas. Antes se contaba
   // cualquier intento, así que equivocarse tecleando el email gastaba el cupo y
   // dejaba a quien se registra bloqueado una hora por un despiste.
-  await prismaUnsafe.registroIntento.create({ data: { ipHash } });
+  await anotarIntento("registro", ipDeLaPeticion());
 
   return { ok: true };
 }

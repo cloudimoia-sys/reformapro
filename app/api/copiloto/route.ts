@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/session";
-import { llamarAGemini, respuestaDeError, leerJson } from "@/lib/gemini";
+import { limiteIaSuperado, ERROR_LIMITE_IA } from "@/lib/limite";
+import { llamarAGemini, respuestaDeError, leerJson, comoDato } from "@/lib/gemini";
 import { buscarNormativa, AVISO_NORMATIVA } from "@/lib/normativa";
 import { calcularDesdePregunta } from "@/lib/calculos";
 import { BAREMO } from "@/lib/baremo";
@@ -26,10 +27,22 @@ type Mensaje = { rol: "usuario" | "copiloto"; texto: string };
 
 export async function POST(req: Request) {
   let db;
+  let empresaId: string;
   try {
-    ({ db } = await requireTenant());
+    ({ db, empresaId } = await requireTenant());
   } catch {
     return NextResponse.json({ error: "Debes iniciar sesión." }, { status: 401 });
+  }
+
+  /**
+   * Freno al abuso del cupo de IA.
+   *
+   * Sin esto, una sola cuenta en bucle vacía el cupo diario de Gemini y deja el
+   * asistente muerto para TODAS las empresas de la plataforma, porque el cupo es
+   * por proyecto. Con clave de pago, además, es dinero.
+   */
+  if (await limiteIaSuperado(empresaId)) {
+    return NextResponse.json({ error: ERROR_LIMITE_IA }, { status: 429 });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -134,7 +147,8 @@ Un constructor que ejecuta con un dato inventado y no pasa la inspección se vue
 ${bloqueNormativa}${bloqueCalculo}${contextoObra}${bloquePrecios}
 ${hayDatos ? "" : "\nNO HAY DATOS para esta pregunta. Responde que no lo tienes cargado, sugiere dónde consultarlo y ofrécete a ayudar con lo que sí cubres: mediciones, cantidades de material, precios de referencia y las partidas del presupuesto abierto.\n"}
 ${historial ? `CONVERSACIÓN HASTA AHORA:\n${historial}\n` : ""}
-PREGUNTA: ${pregunta}
+PREGUNTA:
+${comoDato("pregunta del usuario", pregunta)}
 
 Responde en JSON:
 {

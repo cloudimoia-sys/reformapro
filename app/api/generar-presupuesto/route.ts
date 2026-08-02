@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/session";
+import { limiteIaSuperado, ERROR_LIMITE_IA } from "@/lib/limite";
 import { llamarAGemini, respuestaDeError, leerJson, extraerLista } from "@/lib/gemini";
 import { normalizarUnidad } from "@/lib/unidades";
 import { aplicarCatalogo } from "@/lib/coincidencia";
@@ -26,10 +27,22 @@ type PartidaIA = {
 
 export async function POST(req: Request) {
   let db;
+  let empresaId: string;
   try {
-    ({ db } = await requireTenant());
+    ({ db, empresaId } = await requireTenant());
   } catch {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
+  /**
+   * Freno al abuso del cupo de IA.
+   *
+   * Sin esto, una sola cuenta en bucle vacía el cupo diario de Gemini y deja el
+   * asistente muerto para TODAS las empresas de la plataforma, porque el cupo es
+   * por proyecto. Con clave de pago, además, es dinero.
+   */
+  if (await limiteIaSuperado(empresaId)) {
+    return NextResponse.json({ error: ERROR_LIMITE_IA }, { status: 429 });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;

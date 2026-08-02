@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/session";
-import { llamarAGemini, respuestaDeError, leerJson, extraerLista, type Parte } from "@/lib/gemini";
+import { limiteIaSuperado, ERROR_LIMITE_IA } from "@/lib/limite";
+import { llamarAGemini, respuestaDeError, leerJson, extraerLista, comoDato, type Parte } from "@/lib/gemini";
 import { guionDe, JURAMENTO, DECLARACION_TACHAS, type TipoInforme } from "@/lib/informe";
 import { textoSospechoso, faltanReposiciones } from "@/lib/revision";
 import { normalizarIndirectos } from "@/lib/indirectos";
@@ -23,10 +24,22 @@ const MAX_BASE64_TOTAL = 3.5 * 1024 * 1024;
 type Imagen = { mimeType: string; datos: string; pie?: string; esPlano?: boolean };
 
 export async function POST(req: Request) {
+  let empresaId: string;
   try {
-    await requireTenant();
+    ({ empresaId } = await requireTenant());
   } catch {
     return NextResponse.json({ error: "Debes iniciar sesión." }, { status: 401 });
+  }
+
+  /**
+   * Freno al abuso del cupo de IA.
+   *
+   * Sin esto, una sola cuenta en bucle vacía el cupo diario de Gemini y deja el
+   * asistente muerto para TODAS las empresas de la plataforma, porque el cupo es
+   * por proyecto. Con clave de pago, además, es dinero.
+   */
+  if (await limiteIaSuperado(empresaId)) {
+    return NextResponse.json({ error: ERROR_LIMITE_IA }, { status: 429 });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -87,8 +100,10 @@ DATOS APORTADOS
 - Inmueble: ${f.inmueble || "no indicado"}
 - Solicitante: ${f.solicitante || "no indicado"}
 - Perito que firma: ${f.perito || "no indicado"}${f.titulacion ? ` (${f.titulacion})` : ""}${f.colegiado ? `, colegiado nº ${f.colegiado}` : ""}
-- Antecedentes: ${f.antecedentes || "no se aportan"}
-- ${def.pregunta}: ${f.danos}
+- Antecedentes:
+${f.antecedentes ? comoDato("antecedentes", f.antecedentes) : "no se aportan"}
+- ${def.pregunta}:
+${comoDato("descripción de los daños", f.danos || "")}
 
 IMÁGENES ADJUNTAS (analízalas de verdad, están al principio de este mensaje):
 ${listaImagenes}

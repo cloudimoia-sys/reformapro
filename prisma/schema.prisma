@@ -447,14 +447,27 @@ model PasswordResetToken {
   @@index([usuarioId])
 }
 
-/// Límite de altas por IP. En BD y no en memoria porque en Vercel cada función
-/// serverless tiene su propia memoria y un contador local no serviría de nada.
-model RegistroIntento {
+/// Intentos contados para limitar abuso: altas, inicios de sesión fallidos y
+/// llamadas a la IA.
+///
+/// En base de datos y no en memoria porque en Vercel cada función serverless
+/// tiene su propia memoria: un contador local no contaría casi nada, y bastaría
+/// con repartir los intentos entre instancias para saltárselo.
+///
+/// La tabla sigue llamándose RegistroIntento en Postgres (@@map) para no tener
+/// que renombrarla en producción; el modelo se llama Intento porque ya no cuenta
+/// solo registros.
+model Intento {
   id        String   @id @default(cuid())
-  /// SHA-256 de la IP + secreto: permite contar sin almacenar la IP en claro (RGPD).
+  /// Qué se está contando: "registro", "login", "ia".
+  tipo      String   @default("registro")
+  /// SHA-256 de la IP —o del email— más un secreto: permite contar sin guardar
+  /// el dato en claro (RGPD).
   ipHash    String
   createdAt DateTime @default(now())
 
   @@index([ipHash, createdAt])
   @@index([createdAt])
+  @@index([tipo, ipHash, createdAt])
+  @@map("RegistroIntento")
 }
