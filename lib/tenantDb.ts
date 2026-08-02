@@ -1,4 +1,6 @@
+import { Prisma } from "@prisma/client";
 import { prismaUnsafe } from "@/lib/prisma";
+import { ERROR_SOLO_LECTURA } from "@/lib/suscripcion";
 
 /**
  * Cliente de base de datos atado a UNA empresa.
@@ -14,18 +16,37 @@ import { prismaUnsafe } from "@/lib/prisma";
  * devolver nada sin una empresa. Olvidarse de filtrar deja de ser posible.
  */
 
-/** Tablas que pertenecen a una empresa y se filtran por `empresaId`. */
-const MODELOS_TENANT = new Set([
-  "Usuario",
-  "Cliente",
-  "Proveedor",
-  "Producto",
-  "Presupuesto",
-  "LineaPresupuesto",
-  "Factura",
-  "Informe",
-  "InformeFoto",
-]);
+/**
+ * Tablas que pertenecen a una empresa: TODAS las que tienen un campo `empresaId`.
+ *
+ * SE DERIVA DEL ESQUEMA, no se escribe a mano, y esto no es elegancia — es la
+ * corrección de una fuga real. La lista estaba escrita a mano y al añadir las
+ * obras no se actualizó: durante unas horas, `db.obra.findMany()` devolvió las
+ * obras de TODAS las empresas. No dio ningún error, ni en compilación ni en
+ * ejecución; simplemente devolvía de más, que es exactamente el fallo silencioso
+ * que este fichero existe para impedir.
+ *
+ * Una lista que hay que acordarse de actualizar es una lista que algún día no se
+ * actualiza. Preguntándole al esquema, una tabla nueva con `empresaId` queda
+ * protegida por el hecho de existir.
+ */
+const MODELOS_TENANT = new Set(
+  Prisma.dmmf.datamodel.models
+    .filter((m) => m.fields.some((f) => f.name === "empresaId"))
+    .map((m) => m.name)
+);
+
+/**
+ * Si esto fallara, el conjunto estaría vacío y NADA se filtraría: la fuga total.
+ * Prefiero que la aplicación no arranque a que arranque sirviendo datos ajenos.
+ */
+for (const imprescindible of ["Presupuesto", "Cliente", "Factura"]) {
+  if (!MODELOS_TENANT.has(imprescindible)) {
+    throw new Error(
+      `tenantDb: no se ha podido leer el esquema (falta ${imprescindible}). Se aborta para no servir datos sin filtrar.`
+    );
+  }
+}
 
 /** Operaciones que aceptan un `where` normal: se les añade el filtro de empresa. */
 const OPS_FILTRABLES = new Set([
@@ -72,7 +93,27 @@ const ALTERNATIVA: Record<string, string> = {
   upsert: "findFirst + create/updateMany",
 };
 
-export function tenantDb(empresaId: string) {
+/**
+ * Operaciones que modifican datos.
+ *
+ * Se bloquean cuando la empresa está en solo lectura (prueba vencida, cuenta
+ * suspendida). El bloqueo va AQUÍ y no en cada acción por la misma razón que el
+ * filtro por empresa: hay unas cuarenta acciones que escriben, y la que se olvide
+ * de comprobarlo no daría ningún error — simplemente dejaría escribir a quien no
+ * debe, en silencio y para siempre.
+ */
+const OPS_ESCRITURA = new Set([
+  "create",
+  "createMany",
+  "createManyAndReturn",
+  "update",
+  "updateMany",
+  "delete",
+  "deleteMany",
+  "upsert",
+]);
+
+export function tenantDb(empresaId: string, soloLectura = false) {
   // Guarda deliberadamente en tiempo de ejecución y no solo en tipos: si por un JWT
   // viejo o un fallo llegara `undefined`, Prisma lo trataría como "sin filtro" y
   // devolvería los datos de todas las empresas. Mejor reventar aquí.
@@ -94,6 +135,13 @@ export function tenantDb(empresaId: string) {
           // Operaciones sin modelo ($queryRaw y similares) no se pueden filtrar.
           // Hoy no se usa ninguna; si alguien añade una, que sea una decisión consciente.
           if (!model) return query(args);
+
+          // Lo primero de todo: si la cuenta no puede escribir, no escribe. Antes
+          // incluso del filtro por empresa, porque aquí da igual de quién sean los
+          // datos — no se toca nada.
+          if (soloLectura && OPS_ESCRITURA.has(operation)) {
+            throw new Error(ERROR_SOLO_LECTURA);
+          }
 
           // `Empresa` es la propia empresa: se filtra por su clave primaria, no por
           // `empresaId`. Forzamos el id, así que aquí las operaciones "únicas" sí son
@@ -163,10 +211,14 @@ export type TenantDb = ReturnType<typeof tenantDb>;
  */
 const cache = new Map<string, TenantDb>();
 
-export function tenantDbCacheado(empresaId: string): TenantDb {
-  const yaEstaba = cache.get(empresaId);
+export function tenantDbCacheado(empresaId: string, soloLectura = false): TenantDb {
+  // La clave lleva el modo: si no, la primera petición de una empresa decidiría
+  // para siempre si puede escribir, y una cuenta que acaba de pagar seguiría
+  // bloqueada hasta que se reciclara la función.
+  const clave = `${empresaId}:${soloLectura ? "ro" : "rw"}`;
+  const yaEstaba = cache.get(clave);
   if (yaEstaba) return yaEstaba;
-  const db = tenantDb(empresaId);
-  cache.set(empresaId, db);
+  const db = tenantDb(empresaId, soloLectura);
+  cache.set(clave, db);
   return db;
 }

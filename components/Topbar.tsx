@@ -24,12 +24,18 @@ const TABS_ADMIN: [string, string][] = [
 export default function Topbar({
   nombre,
   rol,
+  esDueno,
 }: {
   nombre: string;
   rol: "ADMIN" | "EMPLEADO";
+  /** Dueño de ReformaPro, no administrador de una empresa cliente. */
+  esDueno?: boolean;
 }) {
   const pathname = usePathname();
   const tabs = rol === "ADMIN" ? [...TABS, ...TABS_ADMIN] : TABS;
+  // La pestaña de suscripciones solo la ve quien lleva la aplicación. Que no se
+  // pinte no es la protección: la protección está en requireDuenoApp().
+  if (esDueno) tabs.push(["/suscripciones", "Suscripciones"]);
 
   return (
     <div className="topbar">

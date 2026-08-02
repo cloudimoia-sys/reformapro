@@ -20,10 +20,19 @@ const PERMITIDO_PRISMA_UNSAFE = [
   "lib/prisma.ts", // lo define
   "lib/tenantDb.ts", // lo envuelve con el filtro
   "lib/auth.ts", // login: busca al usuario por email para saber su empresa
+  // Lee la suscripción para decidir si el cliente filtrado puede escribir: no
+  // puede depender de ese mismo cliente. Acotada por clave primaria a la empresa
+  // que ya viene autenticada en la sesión.
+  "lib/session.ts",
   "lib/counter.ts", // upsert atómico con la empresa ya en la clave primaria
   "app/registro/actions.ts", // crea la empresa: aún no existe
   "app/recuperar/actions.ts", // recuperar contraseña: sin sesión todavía
   "app/restablecer/actions.ts",
+  // Panel del dueño de la app: su trabajo es ver y activar empresas que NO son la
+  // suya. Protegido por requireDuenoApp(), que compara con ADMIN_EMAIL y niega el
+  // acceso si la variable no está puesta.
+  "app/(app)/suscripciones/actions.ts",
+  "app/(app)/suscripciones/page.tsx",
   // Feed de calendario: Google no puede iniciar sesión, así que la autorización
   // es el token secreto de la obra. La consulta está acotada a una sola fila por
   // un campo único, no puede alcanzar datos de otra empresa.

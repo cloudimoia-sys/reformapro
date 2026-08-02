@@ -1,20 +1,29 @@
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireTenant } from "@/lib/session";
 import Topbar from "@/components/Topbar";
+import AvisoSuscripcion from "@/components/AvisoSuscripcion";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const session = await getServerSession(authOptions);
+  // Antes se leía la sesión suelta con getServerSession. Ahora pasa por
+  // requireTenant, que además de exigir empresa devuelve el estado de la
+  // suscripción: así el aviso sale en todas las pantallas sin tener que acordarse
+  // de ponerlo en cada una.
+  //
+  // Sin sesión, con un token viejo sin empresa, o con la empresa ya borrada, lo
+  // que procede en los tres casos es volver a iniciar sesión.
+  const ctx = await requireTenant().catch(() => null);
+  if (!ctx) redirect("/login");
 
-  // Además de la sesión, exigimos empresa: un token viejo (de antes de que la app
-  // fuera multi-empresa) no la lleva, y sin ella las consultas no podrían filtrar.
-  // Mejor mandar a iniciar sesión de nuevo que dejar pasar una sesión a medias.
-  if (!session?.user?.empresaId) redirect("/login");
+  const dueno = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+  const esDueno = !!dueno && ctx.user.email.trim().toLowerCase() === dueno;
 
   return (
     <div className="rp">
-      <Topbar nombre={session.user.name ?? ""} rol={session.user.rol} />
-      <div className="main">{children}</div>
+      <Topbar nombre={ctx.user.nombre} rol={ctx.user.rol} esDueno={esDueno} />
+      <div className="main">
+        <AvisoSuscripcion suscripcion={ctx.suscripcion} />
+        {children}
+      </div>
     </div>
   );
 }

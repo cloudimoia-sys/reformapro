@@ -9,7 +9,7 @@
  * Uso (NUNCA contra producción — borra datos):
  *   DATABASE_URL=<url-de-pruebas> DIRECT_URL=<idem> npx tsx scripts/verificar-aislamiento.ts
  */
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { tenantDb } from "../lib/tenantDb";
 
 const prisma = new PrismaClient();
@@ -105,8 +105,20 @@ async function crearEmpresaDePrueba(sufijo: string) {
   const foto = await prisma.informeFoto.create({
     data: { empresaId, informeId: informe.id, datos: "data:image/png;base64,xx", pie: `Prueba ${sufijo}` },
   });
+  const obra = await prisma.obra.create({
+    data: {
+      empresaId,
+      nombre: `Obra reservada ${sufijo}`,
+      clienteId: cliente.id,
+      inicio: new Date("2099-01-05T00:00:00Z"),
+      tokenCalendario: `token-de-prueba-${sufijo}-${empresaId}`,
+    },
+  });
+  const fase = await prisma.fase.create({
+    data: { empresaId, obraId: obra.id, nombre: `Fase ${sufijo}`, dias: 3 },
+  });
 
-  return { empresaId, usuario, cliente, proveedor, producto, presupuesto, linea, factura, informe, foto };
+  return { empresaId, usuario, cliente, proveedor, producto, presupuesto, linea, factura, informe, foto, obra, fase };
 }
 
 async function limpiar() {
@@ -226,7 +238,61 @@ async function main() {
     })
   );
 
-  console.log("\n6) Invariantes SQL (cruces entre empresas, deben ser 0)");
+  /**
+   * 6) Barrido automático de TODAS las tablas con `empresaId`.
+   *
+   * Los apartados anteriores enumeran casos a mano, y por eso se les escapó uno:
+   * al añadir las obras, `Obra` y `Fase` no entraron en la lista de tablas
+   * filtradas y durante unas horas una empresa vio las obras de otra. No lo
+   * detectó nadie porque no daba error — devolvía de más.
+   *
+   * Esto recorre el esquema y comprueba una por una todas las tablas que
+   * pertenecen a una empresa. Una tabla nueva queda cubierta por existir, sin
+   * que haya que acordarse de añadirla aquí.
+   */
+  console.log("\n6) Barrido de todas las tablas del esquema con empresaId");
+  const tenantModels = Prisma.dmmf.datamodel.models.filter((m) =>
+    m.fields.some((f) => f.name === "empresaId")
+  );
+  if (tenantModels.length < 5) {
+    mal("lectura del esquema", `solo se han encontrado ${tenantModels.length} tablas con empresaId`);
+  }
+  type Delegado = {
+    count: (a?: unknown) => Promise<number>;
+    findMany: (a?: unknown) => Promise<{ id: string }[]>;
+  };
+
+  for (const m of tenantModels) {
+    // El nombre del modelo en el cliente empieza en minúscula: Obra -> obra.
+    const clave = m.name.charAt(0).toLowerCase() + m.name.slice(1);
+    const comoA = (db as unknown as Record<string, Delegado>)[clave];
+    const sinFiltro = (prisma as unknown as Record<string, Delegado>)[clave];
+
+    if (!comoA?.count || !sinFiltro?.findMany) {
+      mal(`barrido de ${m.name}`, "no se ha podido consultar la tabla");
+      continue;
+    }
+    // Counter y similares tienen clave compuesta y no hay un `id` por el que
+    // preguntar. Se dejan a los apartados anteriores.
+    if (!m.fields.some((f) => f.name === "id")) {
+      ok(`${m.name}: sin campo id, se comprueba aparte`);
+      continue;
+    }
+
+    // Se piden los ids REALES de B y se le pregunta a A por ellos. Es la prueba
+    // que importa: si la tabla no se filtra, A los ve.
+    const deB = await sinFiltro.findMany({ where: { empresaId: B.empresaId }, select: { id: true } });
+    if (!deB.length) {
+      mal(`${m.name}`, "la prueba no crea datos de B para esta tabla, así que no se está comprobando");
+      continue;
+    }
+
+    const visibles = await comoA.count({ where: { id: { in: deB.map((r) => r.id) } } });
+    if (visibles === 0) ok(`${m.name}: A no alcanza ninguna de las ${deB.length} filas de B`);
+    else mal(`${m.name}`, `A alcanza ${visibles} de las ${deB.length} filas de B: la tabla no se filtra`);
+  }
+
+  console.log("\n7) Invariantes SQL (cruces entre empresas, deben ser 0)");
   const cruces = await prisma.$queryRawUnsafe<{ que: string; n: bigint }[]>(`
     SELECT 'linea/presupuesto' AS que, count(*) AS n FROM "LineaPresupuesto" l JOIN "Presupuesto" p ON p.id=l."presupuestoId" WHERE l."empresaId"<>p."empresaId"
     UNION ALL SELECT 'producto/proveedor', count(*) FROM "Producto" pr JOIN "Proveedor" v ON v.id=pr."provId" WHERE pr."empresaId"<>v."empresaId"

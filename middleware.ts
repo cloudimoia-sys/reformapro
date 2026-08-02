@@ -20,6 +20,7 @@ export const config = {
     "/facturas/:path*",
     "/equipo/:path*",
     "/empresa/:path*",
+    "/suscripciones/:path*",
     // Faltaba: la ruta de IA se protegía sola por dentro, pero dejarla fuera del
     // middleware significaba que una petición sin sesión llegaba a ejecutarse.
     "/api/generar-presupuesto",
