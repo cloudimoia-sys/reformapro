@@ -45,8 +45,26 @@ Y sobre producción, dos reglas:
 
 1. **Mira antes de tocar.** Cuenta las filas de las tablas principales; si salen a
    cero cuando esperabas datos, para y averigua por qué antes de seguir.
-2. **Aplica el SQL revisado**, no un comando que decida solo. Comprueba que solo
-   contiene `CREATE`/`ALTER ... ADD`, y ejecútalo dentro de una transacción.
+2. **Revisa el SQL antes de commitearlo.** Comprueba que solo contiene
+   `CREATE`/`ALTER ... ADD` y que no hay ningún `DROP` ni `ALTER ... DROP`.
+
+### Cómo se aplican las migraciones en producción
+
+Las aplica el despliegue: `prebuild` ejecuta `scripts/migrar.mjs`, que llama a
+`prisma migrate deploy` **solo cuando corre en Vercel**. En local no hace nada, para
+que un `npm run build` de comprobación no escriba en tu base de datos de trabajo.
+
+Esto no contradice la regla 2. `migrate deploy` **no genera SQL**: ejecuta en orden
+los ficheros de `prisma/migrations` que ya están escritos y revisados a mano. Los
+comandos que sí deciden por su cuenta —`migrate dev`, `db push` y sobre todo
+`migrate diff --shadow-database-url`— siguen sin tocar producción jamás. Lo que se
+automatiza es el paso mecánico de aplicar, que hacerlo a mano cada vez es
+precisamente donde se cometió el error que vació la base de datos.
+
+Requisito: **`DIRECT_URL` tiene que estar en las variables de entorno de Vercel**
+(la cadena "direct"/"unpooled" de Neon; las migraciones no pueden ir por el pooler).
+Si falta, el build se detiene con un mensaje explicando por qué, en lugar de
+desplegar código nuevo contra un esquema antiguo.
 
 ## Despliegue gratis (Vercel + Neon)
 
