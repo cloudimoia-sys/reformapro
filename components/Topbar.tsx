@@ -9,6 +9,7 @@ const TABS: [string, string][] = [
   ["/clientes", "Clientes"],
   ["/catalogo", "Catálogo"],
   ["/presupuestos", "Presupuestos"],
+  ["/obras", "Obras"],
   ["/informes", "Informes"],
   ["/diagnostico", "Diagnóstico"],
   ["/copiloto", "Copiloto"],

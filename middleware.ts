@@ -10,6 +10,10 @@ export const config = {
     "/clientes/:path*",
     "/catalogo/:path*",
     "/presupuestos/:path*",
+    // Ojo: /obras sí va protegido, pero /api/calendario NO puede estar aquí — es
+    // el feed al que se suscribe Google, que no tiene forma de iniciar sesión.
+    // Su autorización es el token secreto de la obra.
+    "/obras/:path*",
     "/informes/:path*",
     "/diagnostico/:path*",
     "/copiloto/:path*",

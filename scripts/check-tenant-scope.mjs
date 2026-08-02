@@ -24,6 +24,10 @@ const PERMITIDO_PRISMA_UNSAFE = [
   "app/registro/actions.ts", // crea la empresa: aún no existe
   "app/recuperar/actions.ts", // recuperar contraseña: sin sesión todavía
   "app/restablecer/actions.ts",
+  // Feed de calendario: Google no puede iniciar sesión, así que la autorización
+  // es el token secreto de la obra. La consulta está acotada a una sola fila por
+  // un campo único, no puede alcanzar datos de otra empresa.
+  "app/api/calendario/[token]/route.ts",
 ];
 
 /** Operaciones que el cliente por empresa prohíbe (ver lib/tenantDb.ts). */

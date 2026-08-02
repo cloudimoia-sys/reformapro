@@ -66,6 +66,13 @@ enum EstadoInforme {
   FINALIZADO
 }
 
+enum EstadoObra {
+  PLANIFICADA
+  EN_CURSO
+  PARADA
+  TERMINADA
+}
+
 enum PlanSuscripcion {
   PRUEBA
   BASICO
@@ -109,6 +116,8 @@ model Empresa {
   counters     Counter[]
   informes     Informe[]
   informeFotos InformeFoto[]
+  obras        Obra[]
+  fases        Fase[]
 }
 
 model Usuario {
@@ -143,6 +152,7 @@ model Cliente {
   presupuestos Presupuesto[]
   facturas     Factura[]
   informes     Informe[]
+  obras        Obra[]
 
   /// Necesario para que las claves foráneas compuestas de abajo puedan apuntar al par
   /// (id, empresaId) y así Postgres impida referenciar un cliente de otra empresa.
@@ -218,6 +228,7 @@ model Presupuesto {
   createdAt  DateTime           @default(now())
   lineas     LineaPresupuesto[]
   facturas   Factura[]
+  obras      Obra[]
 
   @@unique([empresaId, numero])
   @@unique([id, empresaId])
@@ -330,6 +341,75 @@ model InformeFoto {
 
   @@index([empresaId])
   @@index([informeId, empresaId])
+}
+
+/// Obra en ejecución y su planificación.
+///
+/// Las fechas de cada fase NO se guardan: se calculan con lib/planificacion.ts a
+/// partir de la duración, las dependencias y el calendario laboral. Guardarlas
+/// sería duplicar la verdad, y en cuanto alguien moviera el inicio de la obra
+/// quedarían fechas viejas por la base de datos sin que nadie se enterase.
+model Obra {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  nombre    String
+  direccion String  @default("")
+  clienteId String?
+  /// NoAction como en Presupuesto e Informe: en una FK compuesta, SET NULL
+  /// anularía también empresaId, que es NOT NULL.
+  cliente   Cliente? @relation(fields: [clienteId, empresaId], references: [id, empresaId], onDelete: NoAction, onUpdate: NoAction)
+
+  /// Presupuesto del que salieron las fases, si se creó a partir de uno.
+  presupuestoId String?
+  presupuesto   Presupuesto? @relation(fields: [presupuestoId, empresaId], references: [id, empresaId], onDelete: NoAction, onUpdate: NoAction)
+
+  inicio DateTime
+  estado EstadoObra @default(PLANIFICADA)
+
+  /// Festivos autonómicos, locales y cierres de la empresa, en AAAA-MM-DD
+  /// separados por coma. Los nacionales los pone el programa.
+  festivosPropios String  @default("")
+  sabadosSeTrabaja Boolean @default(false)
+
+  /// Secreto del feed de calendario. Quien tiene la URL ve la obra, así que se
+  /// genera aleatorio y se puede regenerar para cortar el acceso.
+  tokenCalendario String @unique
+
+  notas     String   @default("")
+  createdAt DateTime @default(now())
+  fases     Fase[]
+
+  @@unique([id, empresaId])
+  @@index([empresaId])
+  @@index([clienteId, empresaId])
+}
+
+/// Fase de obra. La duración va en días de TRABAJO y la espera en días de
+/// CALENDARIO: el hormigón fragua también en domingo.
+model Fase {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  obraId    String
+  obra      Obra    @relation(fields: [obraId, empresaId], references: [id, empresaId], onDelete: Cascade)
+
+  orden  Int    @default(0)
+  nombre String
+  oficio String @default("")
+  /// Días de trabajo efectivo.
+  dias   Int    @default(1)
+  /// Días naturales de espera obligada al terminar (fraguado, secado, curado).
+  esperaDias Int @default(0)
+  /// Id de la fase que debe terminar antes. Vacío = arranca con la obra.
+  dependeDe String @default("")
+  /// Punto de control: hay que comprobar o decidir algo antes de seguir.
+  hito      Boolean @default(false)
+  notas     String  @default("")
+
+  @@index([empresaId])
+  @@index([obraId, empresaId])
 }
 
 /// Contador atómico para numerar presupuestos/facturas, uno por empresa y año.
