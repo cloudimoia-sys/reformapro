@@ -93,6 +93,11 @@ model Empresa {
   nombre        String
   cif           String            @default("")
   direccion     String            @default("")
+  /// Los tres siguientes son obligatorios en Facturae: sin ellos el XML no valida
+  /// y el programa de gestión del cliente rechaza la importación.
+  codigoPostal  String            @default("")
+  poblacion     String            @default("")
+  provincia     String            @default("")
   tel           String            @default("")
   email         String
   ivaDefecto    Int               @default(10)
@@ -146,6 +151,10 @@ model Cliente {
   tel          String?
   email        String?
   direccion    String?
+  /// Necesarios para exportar a Facturae. Ver el comentario en Empresa.
+  codigoPostal String        @default("")
+  poblacion    String        @default("")
+  provincia    String        @default("")
   nif          String?
   notas        String?
   createdAt    DateTime      @default(now())

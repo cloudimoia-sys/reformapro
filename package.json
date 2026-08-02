@@ -19,8 +19,9 @@
     "test:diagnostico": "tsx scripts/verificar-diagnostico.ts",
     "test:planificacion": "tsx scripts/verificar-planificacion.ts",
     "test:suscripcion": "tsx scripts/verificar-suscripcion.ts",
+    "test:facturacion": "tsx scripts/verificar-facturacion.ts",
     "test:presupuestos": "npm run test:catalogo && npm run test:precios && npm run test:completitud",
-    "test:todo": "npm run test:presupuestos && npm run test:diagnostico && npm run test:planificacion && npm run test:suscripcion"
+    "test:todo": "npm run test:presupuestos && npm run test:diagnostico && npm run test:planificacion && npm run test:suscripcion && npm run test:facturacion"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

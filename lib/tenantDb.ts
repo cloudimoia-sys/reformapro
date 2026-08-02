@@ -165,6 +165,34 @@ export function tenantDb(empresaId: string, soloLectura = false) {
             return query(a);
           }
 
+          /**
+           * `Counter` es como `Empresa`: su clave primaria YA lleva el empresaId
+           * dentro (empresaId + tipo + año). Por eso su `upsert` sí es seguro —el
+           * `where` identifica una fila de esta empresa y de ninguna otra— y por
+           * eso se le deja pasar en vez de prohibirlo.
+           *
+           * Hizo falta al derivar la lista de tablas del esquema: antes `Counter`
+           * no estaba en la lista escrita a mano y se colaba sin pasar por aquí.
+           * Al derivarla, entró, y con ella la prohibición de `upsert`, que dejó
+           * rota la numeración dentro de una transacción.
+           */
+          if (model === "Counter") {
+            const a = (args ?? {}) as Record<string, any>;
+            const clave = a.where?.empresaId_tipo_anio;
+            if (clave) {
+              // Si viene apuntando a otra empresa se aborta, no se reescribe: una
+              // petición equivocada no debe acabar tocando el contador propio.
+              if (clave.empresaId !== undefined && clave.empresaId !== empresaId) {
+                throw new Error("Contador no encontrado");
+              }
+              clave.empresaId = empresaId;
+            } else if (OPS_FILTRABLES.has(operation)) {
+              a.where = { ...(a.where as object), empresaId };
+            }
+            if (a.create) a.create = { ...a.create, empresaId };
+            return query(a);
+          }
+
           if (!MODELOS_TENANT.has(model)) return query(args);
 
           if (OPS_PROHIBIDAS.has(operation)) {

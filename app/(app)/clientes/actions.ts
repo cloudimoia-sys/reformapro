@@ -9,6 +9,10 @@ export type ClienteInput = {
   tel: string;
   email: string;
   direccion: string;
+  /// Obligatorios para exportar a Facturae. Ver lib/facturacion.ts.
+  codigoPostal: string;
+  poblacion: string;
+  provincia: string;
   nif: string;
   notas: string;
 };

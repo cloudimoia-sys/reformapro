@@ -2,11 +2,13 @@ import { redirect } from "next/navigation";
 import { requireTenant } from "@/lib/session";
 import FacturasClient from "./FacturasClient";
 
-export default async function FacturasPage() {
+export const dynamic = "force-dynamic";
+
+export default async function FacturacionPage() {
   const { user, db } = await requireTenant();
   if (user.rol !== "ADMIN") redirect("/panel");
 
-  const [facturas, empresa] = await Promise.all([
+  const [propuestas, empresa] = await Promise.all([
     db.factura.findMany({
       orderBy: { fecha: "desc" },
       include: { cliente: true, presupuesto: { include: { lineas: { orderBy: { orden: "asc" } } } } },
@@ -14,7 +16,7 @@ export default async function FacturasPage() {
     db.empresa.findFirst(),
   ]);
 
-  const data = facturas.map((f) => ({
+  const data = propuestas.map((f) => ({
     id: f.id,
     numero: f.numero,
     fecha: f.fecha.toISOString().slice(0, 10),
@@ -23,8 +25,17 @@ export default async function FacturasPage() {
     total: f.total,
     estado: f.estado,
     titulo: f.presupuesto?.titulo ?? null,
+    // Se manda ya con la forma que pide Facturae, con cadenas vacías en lugar de
+    // null: así el aviso de "te falta el código postal" sale de un solo sitio.
     cliente: f.cliente
-      ? { nombre: f.cliente.nombre, direccion: f.cliente.direccion, nif: f.cliente.nif }
+      ? {
+          nombre: f.cliente.nombre,
+          nif: f.cliente.nif || "",
+          direccion: f.cliente.direccion || "",
+          codigoPostal: f.cliente.codigoPostal,
+          poblacion: f.cliente.poblacion,
+          provincia: f.cliente.provincia,
+        }
       : null,
     lineas: (f.presupuesto?.lineas ?? []).map((l) => ({
       capitulo: l.capitulo,
@@ -39,12 +50,23 @@ export default async function FacturasPage() {
 
   return (
     <FacturasClient
-      facturas={data}
-      empresa={
-        empresa
-          ? { nombre: empresa.nombre, cif: empresa.cif, direccion: empresa.direccion, tel: empresa.tel, email: empresa.email, logo: empresa.logo }
-          : { nombre: "", cif: "", direccion: "", tel: "", email: "", logo: null }
-      }
+      propuestas={data}
+      emisor={{
+        nombre: empresa?.nombre ?? "",
+        nif: empresa?.cif ?? "",
+        direccion: empresa?.direccion ?? "",
+        codigoPostal: empresa?.codigoPostal ?? "",
+        poblacion: empresa?.poblacion ?? "",
+        provincia: empresa?.provincia ?? "",
+      }}
+      empresa={{
+        nombre: empresa?.nombre ?? "",
+        cif: empresa?.cif ?? "",
+        direccion: empresa?.direccion ?? "",
+        tel: empresa?.tel ?? "",
+        email: empresa?.email ?? "",
+        logo: empresa?.logo ?? null,
+      }}
     />
   );
 }

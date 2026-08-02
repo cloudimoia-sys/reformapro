@@ -18,9 +18,9 @@ export default async function Home() {
             Reforma<b>Pro</b>
           </div>
           <p className="hint" style={{ margin: "10px 0 22px", lineHeight: 1.5 }}>
-            Presupuestos, firma del cliente y facturas para reformistas. Genera las
-            partidas con IA, controla tus precios por proveedor y cobra sin perder
-            el hilo.
+            Presupuestos, informes técnicos y planificación de obra para
+            reformistas. Genera las partidas con IA, controla tus precios y exporta
+            lo facturable a tu programa de gestión.
           </p>
 
           <Link className="btn" href="/registro" style={{ display: "block", textAlign: "center", marginBottom: 10 }}>

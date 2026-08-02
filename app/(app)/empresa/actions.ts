@@ -8,6 +8,10 @@ export type EmpresaInput = {
   nombre: string;
   cif: string;
   direccion: string;
+  /// Obligatorios para exportar a Facturae. Ver lib/facturacion.ts.
+  codigoPostal: string;
+  poblacion: string;
+  provincia: string;
   tel: string;
   email: string;
   ivaDefecto: number;

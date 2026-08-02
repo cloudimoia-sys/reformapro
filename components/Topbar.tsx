@@ -16,7 +16,7 @@ const TABS: [string, string][] = [
 ];
 
 const TABS_ADMIN: [string, string][] = [
-  ["/facturas", "Facturas"],
+  ["/facturas", "Facturación"],
   ["/equipo", "Equipo"],
   ["/empresa", "Mi empresa"],
 ];

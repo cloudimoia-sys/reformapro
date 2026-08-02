@@ -8,6 +8,11 @@ const CAMPOS: [keyof Omit<EmpresaInput, "ivaDefecto">, string][] = [
   ["nombre", "Nombre"],
   ["cif", "CIF"],
   ["direccion", "Dirección"],
+  // Los tres siguientes no son adorno: sin ellos el XML de Facturae no valida y
+  // el programa de gestión del cliente rechaza la importación entera.
+  ["codigoPostal", "Código postal"],
+  ["poblacion", "Población"],
+  ["provincia", "Provincia"],
   ["tel", "Teléfono"],
   ["email", "Email"],
 ];

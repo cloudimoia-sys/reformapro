@@ -53,7 +53,7 @@ export default async function PanelPage() {
         {isAdmin && (
           <div className="kpi">
             <div className="v">{eur(ivaRepercutido)}</div>
-            <div className="l">IVA repercutido</div>
+            <div className="l">IVA estimado</div>
           </div>
         )}
       </div>

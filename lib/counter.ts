@@ -29,9 +29,23 @@ type ClienteConCounter = {
  *
  * Pásale `tx` para que el número se reserve DENTRO de la misma transacción que crea
  * el registro: si la creación falla, el incremento se revierte y no queda un hueco
- * en la numeración. En facturas eso no es un detalle, lo exige Hacienda.
+ * en la numeración. Ninguna de estas series es fiscal, pero una numeración con
+ * saltos hace dudar al que la lee, y buscar el PRE-2026-014 que no existe cuesta
+ * una llamada.
  */
-const PREFIJOS = { presupuesto: "PRE", factura: "FAC", informe: "INF" } as const;
+/**
+ * "FAC" ya no: la aplicación NO emite facturas.
+ *
+ * Una serie que empieza por FAC se lee como serie fiscal, y numerar facturas es
+ * competencia del programa de facturación del cliente, que es el que responde
+ * ante Hacienda. Aquí se numeran PROPUESTAS, y su número es una referencia
+ * interna para cruzar con ese programa.
+ *
+ * Las que ya existan con "FAC-" se quedan como están: reescribirlas sería
+ * falsear un histórico. La serie deja de ser fiscal, así que mezclar prefijos no
+ * tiene ninguna consecuencia.
+ */
+const PREFIJOS = { presupuesto: "PRE", factura: "PROP", informe: "INF" } as const;
 
 export async function siguienteNumero(
   empresaId: string,

@@ -10,12 +10,16 @@ const CAMPOS: [keyof ClienteInput, string][] = [
   ["nombre", "Nombre completo"],
   ["tel", "Teléfono"],
   ["email", "Email"],
-  ["direccion", "Dirección de la obra"],
+  ["direccion", "Dirección"],
+  // Sin estos tres, la exportación a Facturae de ese cliente no valida.
+  ["codigoPostal", "Código postal"],
+  ["poblacion", "Población"],
+  ["provincia", "Provincia"],
   ["nif", "NIF"],
   ["notas", "Notas"],
 ];
 
-const VACIO: ClienteInput = { nombre: "", tel: "", email: "", direccion: "", nif: "", notas: "" };
+const VACIO: ClienteInput = { nombre: "", tel: "", email: "", direccion: "", codigoPostal: "", poblacion: "", provincia: "", nif: "", notas: "" };
 
 export default function ClientesClient({ clientes, isAdmin }: { clientes: Cliente[]; isAdmin: boolean }) {
   const router = useRouter();

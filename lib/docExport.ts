@@ -3,6 +3,15 @@
 import * as XLSX from "xlsx";
 import { eur } from "@/lib/format";
 import { importeLinea, desglosePres } from "@/lib/presupuesto";
+import {
+  AVISO_SIN_VALIDEZ_FISCAL,
+  aCSV,
+  faltaParaFacturae,
+  filasCSV,
+  generarFacturae,
+  type ParteFactura,
+  type PropuestaFactura,
+} from "@/lib/facturacion";
 
 export type LineaDoc = {
   capitulo: string | null;
@@ -160,8 +169,12 @@ function docHTMLFactura(fac: FacturaDoc, cliente: ClienteDoc, empresa: EmpresaDo
     .tot{margin-top:14px;text-align:right;font-size:14px}
     .tot b{font-size:17px;color:#1D4E6B}
     .cab{display:flex;justify-content:space-between;margin-top:10px}
+    /* El aviso va arriba, antes de los importes, y se imprime: si solo saliera al
+       pie, alguien acabaría entregándoselo a un cliente como si fuera la factura. */
+    .aviso{background:#FCF0D8;border:1px solid #EBD9A8;color:#7A5A10;border-radius:6px;padding:8px 10px;font-size:12px;margin:8px 0}
   </style></head><body>
-  <h1>FACTURA ${fac.numero}</h1>
+  <h1>PROPUESTA DE FACTURA ${fac.numero}</h1>
+  <div class="aviso">${AVISO_SIN_VALIDEZ_FISCAL}</div>
   ${empresa.logo ? `<img src="${empresa.logo}" alt="" style="max-height:60px;max-width:200px;margin-bottom:8px" />` : ""}
   <div class="cab"><div><b>${empresa.nombre}</b><br>CIF: ${empresa.cif}<br>${empresa.direccion}<br>${empresa.tel} · ${empresa.email}</div>
   <div style="text-align:right"><b>Cliente:</b> ${cliente ? cliente.nombre : "—"}<br>${cliente ? cliente.direccion || "" : ""}<br>NIF: ${cliente ? cliente.nif || "" : ""}<br>Fecha: ${fac.fecha}</div></div>
@@ -190,7 +203,8 @@ export function exportFacturaWord(fac: FacturaDoc, cliente: ClienteDoc, empresa:
 
 export function exportFacturaExcel(fac: FacturaDoc) {
   const rows = [
-    ["Factura", fac.numero],
+    ["Propuesta de factura", fac.numero],
+    ["Aviso", AVISO_SIN_VALIDEZ_FISCAL],
     ["Obra", fac.titulo || ""],
     ["Fecha", fac.fecha],
     [],
@@ -206,6 +220,42 @@ export function exportFacturaExcel(fac: FacturaDoc) {
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws["!cols"] = [{ wch: 28 }, { wch: 44 }, { wch: 10 }, { wch: 8 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Factura");
+  XLSX.utils.book_append_sheet(wb, ws, "Propuesta");
   XLSX.writeFile(wb, `${fac.numero}.xlsx`);
+}
+
+/** Descarga un texto como archivo, sin pasar por el servidor. */
+function descargar(contenido: string, nombre: string, tipo: string) {
+  // El BOM hace que Excel abra el CSV en UTF-8; sin él, las tildes salen rotas y
+  // el usuario cree que la exportación está mal hecha.
+  const bom = tipo.startsWith("text/csv") ? "﻿" : "";
+  const blob = new Blob([bom + contenido], { type: tipo });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = nombre;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/**
+ * Exporta una propuesta en formato Facturae, para importarla en el programa de
+ * facturación. Devuelve la lista de datos que faltan, o vacío si ha ido bien.
+ */
+export function exportFacturae(
+  propuesta: PropuestaFactura,
+  emisor: ParteFactura,
+  receptor: ParteFactura | null
+): string[] {
+  const faltan = faltaParaFacturae(emisor, receptor);
+  if (faltan.length) return faltan;
+  descargar(generarFacturae(propuesta, emisor, receptor!), `${propuesta.numero}.xsig.xml`, "application/xml");
+  return [];
+}
+
+/** Exporta varias propuestas a un CSV que el programa de gestión pueda importar. */
+export function exportCSVFacturacion(
+  propuestas: (PropuestaFactura & { cliente: ParteFactura | null; estado: string })[],
+  nombre: string
+) {
+  descargar(aCSV(filasCSV(propuestas)), nombre, "text/csv;charset=utf-8");
 }

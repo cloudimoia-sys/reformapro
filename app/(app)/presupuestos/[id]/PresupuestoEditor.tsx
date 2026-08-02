@@ -167,7 +167,7 @@ export default function PresupuestoEditor({
               if (e) setError(e);
             }}
           >
-            Crear factura
+            Pasar a facturación
           </button>
         )}
       </div>
