@@ -26,5 +26,7 @@ export const config = {
     "/api/generar-informe",
     "/api/leer-plano",
     "/api/copiloto",
+    "/api/diagnostico",
+    "/api/transcribir",
   ],
 };
