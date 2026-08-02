@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node scripts/check-tenant-scope.mjs && node scripts/migrar.mjs",
+    "prebuild": "node scripts/check-tenant-scope.mjs && node scripts/check-csp.mjs && node scripts/migrar.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

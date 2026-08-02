@@ -1,9 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap');
+/* Las fuentes las carga next/font desde app/layout.tsx y se sirven desde
+   nuestro dominio. NO se importan de fonts.googleapis.com: la CSP lo bloquea,
+   y con razon. */
 :root{
   --bg:#F1F3F2; --panel:#FFFFFF; --ink:#1E2833; --mut:#5C6B76;
   --blue:#1D4E6B; --blue-d:#153B52; --amber:#E8A020; --amber-d:#C4870F;
   --line:#DCE1DF; --ok:#2E7D4F; --warn:#B3541E; --red:#B3372E;
-  --font-d:'Barlow Condensed',sans-serif; --font-b:'Barlow',system-ui,sans-serif;
+  --font-d:var(--font-barlow-condensed),'Barlow Condensed',sans-serif;
+  --font-b:var(--font-barlow),'Barlow',system-ui,sans-serif;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}

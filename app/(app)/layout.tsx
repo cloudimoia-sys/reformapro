@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireTenant } from "@/lib/session";
 import Topbar from "@/components/Topbar";
 import AvisoSuscripcion from "@/components/AvisoSuscripcion";
+import Instalar from "@/components/Instalar";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Antes se leía la sesión suelta con getServerSession. Ahora pasa por
@@ -22,6 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <Topbar nombre={ctx.user.nombre} rol={ctx.user.rol} esDueno={esDueno} />
       <div className="main">
         <AvisoSuscripcion suscripcion={ctx.suscripcion} />
+        <Instalar />
         {children}
       </div>
     </div>
