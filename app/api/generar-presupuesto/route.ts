@@ -4,7 +4,14 @@ import { limiteIaSuperado, ERROR_LIMITE_IA } from "@/lib/limite";
 import { llamarAGemini, respuestaDeError, leerJson, extraerLista } from "@/lib/gemini";
 import { normalizarUnidad } from "@/lib/unidades";
 import { aplicarCatalogo } from "@/lib/coincidencia";
-import { revisarMediciones, faltanElementosPedidos } from "@/lib/revision";
+import {
+  revisarMediciones,
+  faltanElementosPedidos,
+  trabajosNoPedidos,
+  acabadosIncompatibles,
+  paredesCortas,
+  descripcionesVacias,
+} from "@/lib/revision";
 import { bloqueBaremo } from "@/lib/baremo";
 import { normalizarIndirectos } from "@/lib/indirectos";
 import { listaObligatoria, bloqueObligatorias, faltan } from "@/lib/completitud";
@@ -187,6 +194,10 @@ ${reglaSinMateriales}${reglaPlano}- CIÑE EL PRESUPUESTO A LO QUE PIDEN. Presupu
 - Precios unitarios realistas del mercado español actual para calidad ${String(f.calidad || "").toLowerCase()}, coherentes con los bancos de precios oficiales. El precio ES la unidad de obra completa (material + mano de obra + medios auxiliares), NO el material suelto.
 - MANDAN LOS DETALLES SOBRE EL TIPO DE OBRA. El tipo es solo la familia del trabajo; lo que hay que hacer está en los detalles. Si el tipo dice "Baño completo" pero los detalles piden únicamente alicatar el suelo, presupuesta SOLO eso: nada de fontanería, sanitarios ni electricidad.
 - LA SUPERFICIE INDICADA ES LA MEDICIÓN DEL TRABAJO. Si piden alicatar 4 m², son 4 m² de alicatado, no la superficie de la estancia. Solo conviertes de suelo a paredes cuando el trabajo abarca la estancia entera (un baño completo, una reforma integral) y, si lo haces, escribe el cálculo en la descripción ("perímetro 8 m × 2,5 m de altura"). Nunca multipliques la medición que te han dado sin decir por qué.
+- CAMBIAR UN APARATO NO ES RENOVAR LA INSTALACIÓN. Sustituir un inodoro, un lavabo o un plato de ducha es quitar la pieza y montar la nueva sobre la toma que ya está. NO metas renovación de fontanería, rozas ni obra eléctrica salvo que lo pidan con esas palabras. Es lo que más encarece un presupuesto sin que nadie lo haya pedido, y quien lo lee no entiende por qué está.
+- LOS ACABADOS DE PARED SON ALTERNATIVAS, NO SE SUMAN. Alicatado, panel decorativo, papel pintado y microcemento cubren la misma superficie: sobre un paramento va UNO. Si piden paneles decorativos en la pared, NO añadas alicatado de paredes — el panel se pega encima y hace innecesario el alicatado. Presupuestar los dos es cobrar la pared dos veces.
+- «ALICATADO DE SUELO» ES SOLADO. Mucha gente llama alicatar a poner baldosa en cualquier sitio. Si dicen suelo, piso o pavimento, es solado y va en m² de suelo. Solo alicatas paredes si nombran la pared.
+- LA PARED MIDE MUCHO MÁS QUE EL SUELO. En una estancia de A metros cuadrados de suelo, el paramento ronda 10 × raíz(A): un baño de 7 m² tiene unos 26 m² de pared, no 10. Cuando revistas paredes de una estancia cuya superficie de suelo conoces, calcula así y escribe el cálculo en la descripción. Quedarse corto en el acabado más visible se descubre cuando el instalador se queda sin material.
 - LA PINTURA NO SE MIDE POR LA SUPERFICIE DE SUELO. Se pintan las DOS caras de cada tabique, el perímetro interior de fachada y los techos: en una vivienda sale en torno a 4,5-5,5 veces la superficie construida. Para 68 m² construidos son unos 320-370 m² de pintura, no 220. El mismo criterio vale para enlucidos y falsos techos.
 - EL PRODUCTO CONCRETO MANDA SOBRE EL SELECTOR DE CALIDAD. Si nombran una marca, un proveedor o un modelo ("mobiliario Obramat modelo Madrid", "placa Balay", "gres de 60x60"), presupuesta ESE producto y su precio real, aunque la calidad seleccionada diga otra cosa. El selector es una orientación para lo que no está especificado; lo nombrado es un dato. Si el producto nombrado es de gran superficie, no lo cobres a precio de cocina a medida.
 - SI TE DAN LA MEDICIÓN, ÚSALA. Cuando los detalles dicen "4 metros de tubería" o "3 tomas de agua", eso son 4 ml y 3 ud, cada uno en su partida. No lo conviertas en una partida alzada: una alzada sin medición es donde luego aparecen los modificados y las discusiones con el cliente.
@@ -273,6 +284,26 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
         finales.map((l: any) => ({ concepto: l.concepto, descripcion: l.descripcion }))
       )
     );
+
+    /**
+     * Y lo que sobra, que hasta ahora no se miraba.
+     *
+     * Los cuatro salen de un presupuesto de bano real: se pidio solar, panelar
+     * la pared y cambiar los aparatos, y llego con un alicatado de 508 EUR y una
+     * renovacion de fontaneria de 480 EUR que nadie habia pedido, el panel medido
+     * a menos de la mitad de la pared, y el inodoro sin descripcion.
+     */
+    const pedido = `${f.detalles || ""} ${f.estancias || ""}`;
+    const paraRevisar = finales.map((l: any) => ({
+      concepto: l.concepto,
+      descripcion: l.descripcion,
+      cantidad: l.cantidad,
+      unidad: l.unidad,
+    }));
+    avisos.push(...trabajosNoPedidos(pedido, paraRevisar));
+    avisos.push(...acabadosIncompatibles(paraRevisar));
+    avisos.push(...paredesCortas(paraRevisar));
+    avisos.push(...descripcionesVacias(paraRevisar));
 
     return NextResponse.json({ lineas: finales, partidasPropiasAplicadas: aplicadas, avisos });
   } catch (e: any) {

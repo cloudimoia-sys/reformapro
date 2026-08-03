@@ -63,8 +63,9 @@ for (const [concepto, debeAplicar] of CASOS) {
 }
 
 console.log("");
-if (fallos) {
-  console.log(`CATÁLOGO INCORRECTO — ${fallos} de ${CASOS.length} casos mal`);
-  process.exit(1);
-}
-console.log(`CATÁLOGO CORRECTO — ${CASOS.length} casos, y en ninguno se añadió trabajo que no se había pedido`);
+console.log(
+  fallos
+    ? `CATÁLOGO INCORRECTO — ${fallos} ${fallos === 1 ? "fallo" : "fallos"}`
+    : "CATÁLOGO CORRECTO — no se añade trabajo que no se pidió, ni se cobra dos veces la misma pared"
+);
+process.exit(fallos ? 1 : 0);

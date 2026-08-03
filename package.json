@@ -15,12 +15,13 @@
     "postinstall": "prisma generate",
     "test:catalogo": "tsx scripts/verificar-catalogo.ts",
     "test:precios": "tsx scripts/verificar-precios.ts",
+    "test:sobrantes": "tsx scripts/verificar-sobrantes.ts",
     "test:completitud": "tsx scripts/verificar-completitud.ts",
     "test:diagnostico": "tsx scripts/verificar-diagnostico.ts",
     "test:planificacion": "tsx scripts/verificar-planificacion.ts",
     "test:suscripcion": "tsx scripts/verificar-suscripcion.ts",
     "test:facturacion": "tsx scripts/verificar-facturacion.ts",
-    "test:presupuestos": "npm run test:catalogo && npm run test:precios && npm run test:completitud",
+    "test:presupuestos": "npm run test:catalogo && npm run test:precios && npm run test:sobrantes && npm run test:completitud",
     "test:todo": "npm run test:presupuestos && npm run test:diagnostico && npm run test:planificacion && npm run test:suscripcion && npm run test:facturacion"
   },
   "prisma": {

@@ -26,6 +26,16 @@ export const BAREMO: PrecioReferencia[] = [
   // Revestimientos
   { concepto: "Solado de gres porcelánico", unidad: "m²", conMaterial: 38, soloMano: 26 },
   { concepto: "Alicatado de paredes con azulejo o porcelánico", unidad: "m²", conMaterial: 40, soloMano: 28 },
+  /**
+   * El panel decorativo va PEGADO sobre el paramento: ni rejuntado, ni cortes a
+   * inglete, ni maestras. Su mano de obra tiene que quedar claramente por debajo
+   * de la del alicatado o el presupuesto no se sostiene delante de un cliente.
+   *
+   * Faltaba, y por eso el asistente se lo inventaba: en un baño real salió a
+   * 45 €/m², por encima del alicatado, que es justo lo que no puede pasar.
+   */
+  { concepto: "Panel decorativo de pared (SPC, PVC o composite), pegado", unidad: "m²", conMaterial: 36, soloMano: 14 },
+  { concepto: "Panel de gran formato para plato de ducha y frente", unidad: "m²", conMaterial: 52, soloMano: 18 },
   { concepto: "Tarima flotante laminada", unidad: "m²", conMaterial: 32, soloMano: 16 },
   { concepto: "Rodapié", unidad: "ml", conMaterial: 9, soloMano: 5 },
   { concepto: "Pintura plástica lisa en paramentos", unidad: "m²", conMaterial: 9, soloMano: 7 },
