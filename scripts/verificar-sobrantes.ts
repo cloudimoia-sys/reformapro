@@ -22,6 +22,7 @@
  */
 import { BAREMO } from "../lib/baremo";
 import {
+  acabadoDeParedNoPedido,
   acabadosIncompatibles,
   descripcionesVacias,
   paredesCortas,
@@ -210,7 +211,9 @@ const PEDIDO_REAL =
 
 const presupuestoReal = [
   l("Alicatado de suelos", "Solado con baldosa cerámica en todo el baño", 7.1, "m²"),
-  l("Pintura plástica lisa en paramentos", "Pintura sobre paramentos no alicatados", 10, "m²"),
+  // 33 m² es lo que mide la pared de un baño de 7,1. Con 10 el aviso SÍ debe
+  // saltar: de los tres avisos de aquel día, ese no era falso — los otros dos sí.
+  l("Pintura plástica lisa en paramentos", "Pintura sobre paramentos no alicatados", 33, "m²"),
   l("Panel decorativo de pared", "Panel para la zona de ducha", 3.5, "m²"),
   l("Sustitución de plato de ducha", "Retirada y montaje del nuevo plato"),
   l("Mampara de ducha", "Suministro y montaje"),
@@ -246,6 +249,47 @@ if (!acabadosIncompatibles(dosDeVerdad).length) {
 } else {
   bien("dos acabados generales sobre la misma pared se siguen detectando");
 }
+
+/**
+ * LA SEGUNDA TIRADA DEL MISMO ENCARGO, que salió mal.
+ *
+ * Con la frase idéntica, otra generación trajo:
+ *   - "Alicatado de paredes", 22 m² y 630 €, sin haberse pedido. Para la pared
+ *     se había pedido pintura, y el panel solo para la ducha.
+ *   - La pintura medida a 8 m², que con 7,1 m² de suelo es justo el TECHO: se
+ *     pidió pintar las paredes y se midió el techo.
+ *
+ * Es la prueba de que el modelo no es fiable en esto: dos tiradas de la MISMA
+ * frase dan resultados distintos. Por eso la barrera tiene que estar en el
+ * código, y no en pedírselo mejor.
+ */
+console.log("\nLa segunda tirada, que salió mal");
+
+const MAL = [
+  l("Panel decorativo de pared", "Colocación de panel decorativo en ducha", 4, "m²"),
+  l("Alicatado de paredes", "Alicatado de paredes del baño", 22, "m²"),
+  l("Pintura plástica lisa en paramentos", "Pintura plástica lisa en techo", 8, "m²"),
+  l("Solado de gres porcelánico", "Solado del baño", 7.1, "m²"),
+];
+
+const noPedido = acabadoDeParedNoPedido(PEDIDO_REAL, MAL);
+if (!noPedido.length) mal("alicatado no pedido", "no se avisa del alicatado de paredes");
+else if (!/pintura/i.test(noPedido[0])) mal("alicatado no pedido", "no dice qué se pidió para la pared");
+else bien("avisa del alicatado de paredes y recuerda que la pared llevaba pintura");
+
+const techo = paredesCortas(MAL, PEDIDO_REAL);
+if (!techo.length) mal("pintura solo del techo", "8 m² con 7,1 de suelo no salta");
+else if (!/techo/i.test(techo[0])) mal("pintura solo del techo", "no explica que eso es medir el techo");
+else bien("avisa de que 8 m² de pintura es medir el techo, no las paredes");
+
+// Y la tirada que estaba bien sigue sin dar un solo aviso.
+const falsos = [
+  ...acabadoDeParedNoPedido(PEDIDO_REAL, presupuestoReal),
+  ...acabadosIncompatibles(presupuestoReal),
+  ...paredesCortas(presupuestoReal, PEDIDO_REAL),
+];
+if (falsos.length) mal("la tirada buena", falsos[0].slice(0, 110));
+else bien("la tirada que estaba bien sigue sin dar ni un aviso");
 
 console.log(
   fallos

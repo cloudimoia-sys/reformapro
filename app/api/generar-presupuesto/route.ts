@@ -6,6 +6,7 @@ import { normalizarUnidad } from "@/lib/unidades";
 import { aplicarCatalogo } from "@/lib/coincidencia";
 import {
   revisarMediciones,
+  acabadoDeParedNoPedido,
   faltanElementosPedidos,
   trabajosNoPedidos,
   acabadosIncompatibles,
@@ -301,6 +302,7 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
       unidad: l.unidad,
     }));
     avisos.push(...trabajosNoPedidos(pedido, paraRevisar));
+    avisos.push(...acabadoDeParedNoPedido(pedido, paraRevisar));
     avisos.push(...acabadosIncompatibles(paraRevisar));
     avisos.push(...paredesCortas(paraRevisar, pedido));
     avisos.push(...descripcionesVacias(paraRevisar));
