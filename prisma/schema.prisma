@@ -59,6 +59,7 @@ enum TipoInforme {
   RECLAMACION
   CARTA_SEGURO
   SOLICITUD_AYUNTAMIENTO
+  EVALUACION_ENERGETICA
 }
 
 enum EstadoInforme {

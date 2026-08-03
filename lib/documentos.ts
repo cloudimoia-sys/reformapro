@@ -18,7 +18,8 @@ export type TipoDocumento =
   | "CERTIFICACION"
   | "RECLAMACION"
   | "CARTA_SEGURO"
-  | "SOLICITUD_AYUNTAMIENTO";
+  | "SOLICITUD_AYUNTAMIENTO"
+  | "EVALUACION_ENERGETICA";
 
 export type DefinicionDocumento = {
   etiqueta: string;
@@ -247,6 +248,41 @@ export const DOCUMENTOS: Record<TipoDocumento, DefinicionDocumento> = {
 6. PRESUPUESTO DE EJECUCIÓN MATERIAL — se genera de las partidas: es la base del impuesto de construcciones.
 7. DOCUMENTACIÓN QUE SE ADJUNTA — la que acompaña a la solicitud.
 8. SOLICITA — la petición formal, redactada como tal.`,
+  },
+  /**
+   * NO es un certificado de eficiencia energética, y el guion está escrito para
+   * que no pueda confundirse con uno.
+   *
+   * El certificado oficial exige tres cosas que no dependen del programa: lo
+   * firma un técnico competente, se calcula con software reconocido (CE3X,
+   * CERMA, HULC, SG SAVE) y se registra en la comunidad autónoma, que es quien
+   * da el número y la etiqueta (RD 390/2021). Un documento que imitara al
+   * original sin ese registro es un problema para quien lo firma.
+   *
+   * Lo que este documento hace es lo de antes y lo de después: decidir qué obras
+   * suben la letra, ponerles precio, y entregarle al técnico la toma de datos
+   * hecha. El apartado 1 es el aviso, y va el primero a propósito.
+   */
+  EVALUACION_ENERGETICA: {
+    etiqueta: "Evaluación energética previa (no es el certificado)",
+    grupo: "Informes técnicos",
+    pregunta: "¿Qué se ha visto en la vivienda y qué quiere conseguir el cliente?",
+    ejemplo:
+      "Piso de 1972 en última planta, 85 m². Ventanas de aluminio sin rotura, radiadores con caldera de gasóleo. El cliente quiere alquilarlo y le han dicho que necesita el certificado.",
+    conPresupuesto: true,
+    conTecnico: false,
+    advertencia:
+      "Esto NO es un certificado de eficiencia energética ni lo sustituye. El certificado lo emite un técnico competente con programa reconocido y hay que registrarlo en tu comunidad autónoma. Este documento sirve para decidir qué obras merecen la pena y para llevarle la toma de datos hecha al técnico.",
+    guion: `
+1. ADVERTENCIA PREVIA — copia literalmente el aviso que te da el programa. Va el primero y sin suavizarlo.
+2. IDENTIFICACIÓN DE LA VIVIENDA — emplazamiento, referencia catastral, año de construcción, superficie y tipología.
+3. CONDICIONANTES DE PARTIDA — zona climática y normativa de aislamiento que le aplicaba cuando se construyó. Explica qué significa eso para esta vivienda concreta.
+4. ESTADO ACTUAL DE LA ENVOLVENTE Y LAS INSTALACIONES — fachada, cubierta, huecos, calefacción y ACS, uno por uno y con lo que se ha observado.
+5. CALIFICACIÓN ESTIMADA — el RANGO que te da el programa, nunca una letra sola, y por qué sale ese rango. Di expresamente que la definitiva puede diferir y que solo vale la que calcule el técnico con programa reconocido.
+6. MEJORAS PROPUESTAS Y SU EFECTO — una por una, en el orden que te da el programa, diciendo qué se gana con cada una. No inventes mejoras que no estén en esa lista.
+7. VALORACIÓN ECONÓMICA — se genera de las partidas, no lo redactes como texto.
+8. CÓMO SE OBTIENE EL CERTIFICADO OFICIAL — los pasos reales: técnico competente, cálculo con programa reconocido, registro en la comunidad autónoma y etiqueta. Di que es obligatorio para vender o alquilar.
+9. FICHA DE TOMA DE DATOS PARA EL TÉCNICO — se genera del formulario, no lo redactes como texto.`,
   },
 };
 

@@ -5,8 +5,16 @@ import { llamarAGemini, respuestaDeError, leerJson, extraerLista, comoDato, type
 import { guionDe, JURAMENTO, DECLARACION_TACHAS, type TipoInforme } from "@/lib/informe";
 import { textoSospechoso, faltanReposiciones } from "@/lib/revision";
 import { normalizarIndirectos } from "@/lib/indirectos";
-import { bloqueBaremo } from "@/lib/baremo";
+import { BAREMO, bloqueBaremo } from "@/lib/baremo";
 import { definicionDe } from "@/lib/documentos";
+import {
+  AVISO_NO_ES_CERTIFICADO,
+  bloqueParaElModelo,
+  estimar,
+  fichaParaElTecnico,
+  mejorasPara,
+  type DatosEnergeticos,
+} from "@/lib/energia";
 
 export const maxDuration = 60;
 
@@ -60,6 +68,8 @@ export async function POST(req: Request) {
     antecedentes?: string;
     danos?: string;
     imagenes?: Imagen[];
+    /** Solo en la evaluación energética; el resto de documentos no lo mandan. */
+    energia?: DatosEnergeticos;
   };
   try {
     f = await req.json();
@@ -92,6 +102,26 @@ export async function POST(req: Request) {
         .join("\n")
     : "(no se aportan imágenes)";
 
+  /*
+   * Evaluación energética: lo que se puede calcular, se calcula aquí.
+   *
+   * La zona climática, el rango de letra y las mejoras que proceden salen de
+   * lib/energia.ts y se le entregan al modelo ya resueltos. El modelo solo
+   * redacta alrededor. Si esto se le dejara deducir del texto libre, la misma
+   * vivienda daría una letra distinta en cada generación, y aquí la letra es
+   * justo lo que el cliente va a repetirle a un comprador.
+   */
+  const energia: DatosEnergeticos | null =
+    tipo === "EVALUACION_ENERGETICA" && f.energia ? (f.energia as DatosEnergeticos) : null;
+
+  const bloqueEnergia = energia
+    ? `
+${bloqueParaElModelo(energia)}
+
+AVISO QUE VA LITERAL EN EL APARTADO 1, sin cambiarle una palabra ni suavizarlo:
+${AVISO_NO_ES_CERTIFICADO}`
+    : "";
+
   const prompt = `Eres un arquitecto técnico español con veinte años de oficio, y redactas la documentación de obra que se entrega a clientes, aseguradoras, administraciones y juzgados. Escribes en el registro propio de cada documento: preciso, impersonal y sin adornos.
 
 TIPO DE DOCUMENTO: ${def.etiqueta}
@@ -107,6 +137,8 @@ ${comoDato("descripción de los daños", f.danos || "")}
 
 IMÁGENES ADJUNTAS (analízalas de verdad, están al principio de este mensaje):
 ${listaImagenes}
+
+${bloqueEnergia}
 
 APARTADOS OBLIGATORIOS, en este orden y con esta numeración:
 ${guionDe(tipo)}
@@ -279,6 +311,73 @@ Responde SOLO con JSON válido, sin markdown:
     avisos.push(
       ...faltanReposiciones(partidasFinales.map((p: any) => ({ concepto: p.descripcion, descripcion: p.descripcion })))
     );
+
+    /*
+     * Evaluación energética: lo que no puede depender de cómo redacte el modelo.
+     *
+     * Tres cosas se imponen desde aquí, igual que el juramento del pericial:
+     *
+     *  1. El aviso de que NO es un certificado va literal en el apartado 1. Si
+     *     el modelo lo suaviza —y suavizar es justo lo que hace un modelo cuando
+     *     un aviso suena duro—, el documento pasa a parecerse a lo que no es.
+     *  2. Las mejoras calculadas se presupuestan con el baremo, no con el precio
+     *     que se le ocurra al modelo.
+     *  3. La ficha de toma de datos para el técnico se genera del formulario.
+     */
+    if (energia) {
+      const e = estimar(energia);
+
+      const iAviso = apartados.findIndex((a: any) => /advertencia|aviso/i.test(a.titulo));
+      if (iAviso >= 0) apartados[iAviso].texto = AVISO_NO_ES_CERTIFICADO;
+      else apartados.unshift({ numero: "0", titulo: "Advertencia previa", texto: AVISO_NO_ES_CERTIFICADO, subapartados: [] });
+
+      // Las mejoras que el modelo no haya presupuestado se añaden con su precio
+      // del baremo. Una mejora recomendada en el texto y ausente del presupuesto
+      // es una obra que el cliente cree contratada y nadie ha valorado.
+      const yaPresupuestado = JSON.stringify(partidasFinales).toLowerCase();
+      let n = partidasFinales.length;
+      for (const m of mejorasPara(energia)) {
+        const clave = m.concepto.slice(0, 24).toLowerCase();
+        if (yaPresupuestado.includes(clave)) continue;
+        const ref = BAREMO.find((b) => b.concepto === m.concepto);
+        if (!ref) continue;
+        n++;
+        partidasFinales.push({
+          codigo: `99.${String(n).padStart(2, "0")}`,
+          descripcion: `${m.concepto}. ${m.porQue}`,
+          unidad: m.unidad,
+          cantidad: m.cantidad,
+          precio: ref.conMaterial,
+          // Opcional a propósito: son mejoras, no una patología que reparar. Así
+          // no inflan el total que el cliente lee como "lo que hay que hacer".
+          opcional: true,
+        });
+      }
+
+      apartados.push({
+        numero: String(apartados.length + 1),
+        titulo: "Ficha de toma de datos para el técnico certificador",
+        texto: fichaParaElTecnico(energia)
+          .map((c) => `${c.campo}: ${c.valor}`)
+          .join("\n"),
+        subapartados: [],
+      });
+
+      /*
+       * Y se comprueba lo que ha escrito el modelo. Estos dos avisos son la red:
+       * el prompt lo prohíbe, pero "casi siempre" no vale cuando lo que está en
+       * juego es que alguien enseñe esto como si fuera el certificado.
+       */
+      const redactado = JSON.stringify(apartados);
+      if (/certificado de eficiencia energética (de|con) (la|esta)/i.test(redactado)) {
+        avisos.push('El texto llama "certificado" a este documento en algún punto. Corrígelo antes de entregarlo: no lo es.');
+      }
+      if (new RegExp(`calificaci[oó]n[^.]{0,40}\b(letra )?${e.desde}\b(?![-–—])`, "i").test(redactado) && e.desde !== e.hasta) {
+        avisos.push(
+          `El texto da una letra sola. La estimación es un RANGO (${e.desde}-${e.hasta}) y así tiene que leerse: la letra oficial solo la da el técnico con programa reconocido.`
+        );
+      }
+    }
 
     return NextResponse.json({
       titulo: String(parsed.titulo || "").trim() || "Informe técnico",

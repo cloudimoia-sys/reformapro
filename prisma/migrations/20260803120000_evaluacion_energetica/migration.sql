@@ -1,0 +1,11 @@
+-- Evaluación energética previa: un tipo de documento más.
+--
+-- NO es un certificado de eficiencia energética. El certificado lo emite un
+-- técnico competente con programa reconocido y se registra en la comunidad
+-- autónoma (RD 390/2021); esto es la evaluación previa que decide qué obras
+-- merecen la pena y le prepara la toma de datos al técnico.
+--
+-- Solo añade un valor al enum: los informes ya guardados conservan el suyo y no
+-- se reescribe nada. Va fuera de transacción porque Postgres no deja usar un
+-- valor de enum dentro de la misma transacción en que se crea.
+ALTER TYPE "TipoInforme" ADD VALUE IF NOT EXISTS 'EVALUACION_ENERGETICA';

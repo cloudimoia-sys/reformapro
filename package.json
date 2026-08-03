@@ -22,7 +22,8 @@
     "test:suscripcion": "tsx scripts/verificar-suscripcion.ts",
     "test:facturacion": "tsx scripts/verificar-facturacion.ts",
     "test:presupuestos": "npm run test:catalogo && npm run test:precios && npm run test:sobrantes && npm run test:completitud",
-    "test:todo": "npm run test:presupuestos && npm run test:diagnostico && npm run test:planificacion && npm run test:suscripcion && npm run test:facturacion"
+    "test:todo": "npm run test:presupuestos && npm run test:diagnostico && npm run test:planificacion && npm run test:suscripcion && npm run test:facturacion && npm run test:energia",
+    "test:energia": "tsx scripts/verificar-energia.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

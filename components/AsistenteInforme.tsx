@@ -3,6 +3,13 @@
 import { useState } from "react";
 import type { ContenidoInforme, TipoInforme } from "@/lib/informe";
 import { DOCUMENTOS, documentosPorGrupo } from "@/lib/documentos";
+import {
+  ETIQUETA_SISTEMA,
+  ETIQUETA_TIPO_VIVIENDA,
+  ETIQUETA_VENTANA,
+  zonaClimatica,
+  type DatosEnergeticos,
+} from "@/lib/energia";
 import Dictar from "@/components/Dictar";
 import type { DatosInforme, FotoNueva } from "@/app/(app)/informes/actions";
 
@@ -69,6 +76,32 @@ export default function AsistenteInforme({
   const [titulacion, setTitulacion] = useState("");
   const [colegiado, setColegiado] = useState("");
   const [antecedentes, setAntecedentes] = useState("");
+
+  /**
+   * Datos de la evaluación energética.
+   *
+   * Van en un formulario y no en el texto libre porque de aquí sale un CÁLCULO,
+   * no una redacción: la época de construcción, la zona climática y el sistema
+   * de calefacción deciden el rango de letra y qué mejoras se proponen. Si se
+   * dejaran a que la IA los dedujera del relato, dos informes de la misma
+   * vivienda darían resultados distintos.
+   */
+  const [energia, setEnergia] = useState<DatosEnergeticos>({
+    provincia: "",
+    altitud: undefined,
+    anio: 1975,
+    superficie: 90,
+    tipo: "PISO_INTERMEDIO",
+    ventanas: "SIMPLE_METAL",
+    fachadaAislada: false,
+    cubiertaAislada: false,
+    sistemaCalefaccion: "CALDERA_GAS",
+    sistemaAcs: "CALDERA_GAS",
+    renovables: false,
+  });
+  const esEnergetica = tipo === "EVALUACION_ENERGETICA";
+  const ponEnergia = <K extends keyof DatosEnergeticos>(k: K, v: DatosEnergeticos[K]) =>
+    setEnergia((prev) => ({ ...prev, [k]: v }));
   const [danos, setDanos] = useState("");
   const [imagenes, setImagenes] = useState<ImagenLocal[]>([]);
   const [cargando, setCargando] = useState(false);
@@ -128,6 +161,9 @@ export default function AsistenteInforme({
           colegiado,
           antecedentes,
           danos,
+          // Solo viaja cuando es el documento que lo usa: mandarlo siempre
+          // metería en el prompt de un acta de visita datos que no pintan nada.
+          energia: esEnergetica ? energia : null,
           imagenes: imagenes.map((im) => ({
             // El data URL lleva delante "data:image/jpeg;base64,": la API espera
             // solo la parte codificada.
@@ -228,6 +264,147 @@ export default function AsistenteInforme({
             <input className="inp" value={solicitante} onChange={(e) => setSolicitante(e.target.value)} placeholder="Comunidad de propietarios, aseguradora, juzgado…" />
           </div>
         </div>
+
+        {esEnergetica && (
+          <div
+            className="card"
+            style={{ background: "#F7F9F8", padding: 14, marginBottom: 14 }}
+          >
+            <h3 style={{ fontSize: 17, marginBottom: 4 }}>Datos de la vivienda</h3>
+            <p className="hint" style={{ marginTop: 0 }}>
+              Con esto el programa calcula la zona climática, el rango de calificación y qué mejoras merecen la pena.
+              No lo redacta la IA: se calcula, para que la misma vivienda dé siempre el mismo resultado.
+            </p>
+
+            <div className="grid g3">
+              <div className="field">
+                <label className="lbl">Provincia</label>
+                <input
+                  className="inp"
+                  value={energia.provincia}
+                  onChange={(e) => ponEnergia("provincia", e.target.value)}
+                  placeholder="Málaga"
+                />
+              </div>
+              <div className="field">
+                <label className="lbl">Altitud (m, opcional)</label>
+                <input
+                  className="inp"
+                  type="number"
+                  value={energia.altitud ?? ""}
+                  onChange={(e) => ponEnergia("altitud", e.target.value ? Number(e.target.value) : undefined)}
+                  placeholder="575"
+                />
+              </div>
+              <div className="field">
+                <label className="lbl">Zona climática</label>
+                {/* Se enseña en cuanto escribe la provincia: si sale "—" es que
+                    no la ha reconocido, y así se entera antes de generar. */}
+                <input className="inp" value={zonaClimatica(energia.provincia, energia.altitud) || "—"} readOnly />
+              </div>
+            </div>
+
+            <div className="grid g3">
+              <div className="field">
+                <label className="lbl">Año de construcción</label>
+                <input
+                  className="inp"
+                  type="number"
+                  value={energia.anio}
+                  onChange={(e) => ponEnergia("anio", Number(e.target.value) || 0)}
+                />
+              </div>
+              <div className="field">
+                <label className="lbl">Superficie útil (m²)</label>
+                <input
+                  className="inp"
+                  type="number"
+                  value={energia.superficie}
+                  onChange={(e) => ponEnergia("superficie", Number(e.target.value) || 0)}
+                />
+              </div>
+              <div className="field">
+                <label className="lbl">Tipología</label>
+                <select
+                  className="inp"
+                  value={energia.tipo}
+                  onChange={(e) => ponEnergia("tipo", e.target.value as DatosEnergeticos["tipo"])}
+                >
+                  {Object.entries(ETIQUETA_TIPO_VIVIENDA).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="field">
+              <label className="lbl">Ventanas</label>
+              <select
+                className="inp"
+                value={energia.ventanas}
+                onChange={(e) => ponEnergia("ventanas", e.target.value as DatosEnergeticos["ventanas"])}
+              >
+                {Object.entries(ETIQUETA_VENTANA).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid g2">
+              <div className="field">
+                <label className="lbl">Calefacción</label>
+                <select
+                  className="inp"
+                  value={energia.sistemaCalefaccion}
+                  onChange={(e) => ponEnergia("sistemaCalefaccion", e.target.value as DatosEnergeticos["sistemaCalefaccion"])}
+                >
+                  {Object.entries(ETIQUETA_SISTEMA).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label className="lbl">Agua caliente sanitaria</label>
+                <select
+                  className="inp"
+                  value={energia.sistemaAcs}
+                  onChange={(e) => ponEnergia("sistemaAcs", e.target.value as DatosEnergeticos["sistemaAcs"])}
+                >
+                  {Object.entries(ETIQUETA_SISTEMA).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="row" style={{ gap: 18 }}>
+              <label className="hint" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={energia.fachadaAislada}
+                  onChange={(e) => ponEnergia("fachadaAislada", e.target.checked)}
+                />
+                Fachada ya aislada
+              </label>
+              <label className="hint" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={energia.cubiertaAislada}
+                  onChange={(e) => ponEnergia("cubiertaAislada", e.target.checked)}
+                />
+                Cubierta ya aislada
+              </label>
+              <label className="hint" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={energia.renovables}
+                  onChange={(e) => ponEnergia("renovables", e.target.checked)}
+                />
+                Tiene placas solares
+              </label>
+            </div>
+          </div>
+        )}
 
         <div className="grid g3">
           <div className="field">
