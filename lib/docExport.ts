@@ -45,6 +45,32 @@ export type EmpresaDoc = {
   logo?: string | null;
 };
 
+
+/**
+ * Escapa lo que va dentro del HTML de los documentos que se exportan.
+ *
+ * FALTABA POR COMPLETO, y era un agujero de verdad: el nombre del cliente, el
+ * concepto de una partida, las notas y el título de la obra se metían tal cual
+ * en el HTML que luego se abre con `document.write` en una ventana del MISMO
+ * origen. Un `<img onerror=...>` en cualquiera de esos campos ejecutaba código
+ * como el usuario que exportaba.
+ *
+ * Y no hace falta un empleado con mala idea: la descripción de los daños de un
+ * informe se pega muchas veces desde el correo de un cliente, y lo que redacta
+ * la IA sale de ahí. Bastaba con que ese texto llevara una etiqueta dentro.
+ *
+ * Se escapan también las comillas: varios de estos valores van dentro de un
+ * atributo (`src` del logo y de la firma), y sin escaparlas se sale del atributo.
+ */
+function esc(v: unknown): string {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function celdaDescuento(l: LineaDoc, conDescuentos: boolean) {
   return conDescuentos ? `<td style="text-align:right">${l.descuento ? `${l.descuento}%` : ""}</td>` : "";
 }
@@ -63,20 +89,20 @@ function docHTML(pres: PresupuestoDoc, cliente: ClienteDoc, empresa: EmpresaDoc)
       const ls = pres.lineas.filter((l) => (l.capitulo || "Partidas") === cap);
       const sub = ls.reduce((s, l) => s + importeLinea(l), 0);
       return (
-        `<tr><td colspan="${colspan}" style="background:#EDF2F5;font-weight:bold;color:#1D4E6B;text-transform:uppercase;font-size:12px">${cap}</td></tr>` +
+        `<tr><td colspan="${colspan}" style="background:#EDF2F5;font-weight:bold;color:#1D4E6B;text-transform:uppercase;font-size:12px">${esc(cap)}</td></tr>` +
         ls
           .map(
             (l) =>
-              `<tr><td>${l.concepto}</td><td>${l.descripcion || ""}</td><td style="text-align:right">${l.cantidad} ${l.unidad}</td><td style="text-align:right">${eur(l.precio)}</td>${celdaDescuento(l, conDescuentos)}<td style="text-align:right">${eur(importeLinea(l))}</td></tr>`
+              `<tr><td>${esc(l.concepto)}</td><td>${esc(l.descripcion || "")}</td><td style="text-align:right">${esc(l.cantidad)} ${esc(l.unidad)}</td><td style="text-align:right">${eur(l.precio)}</td>${celdaDescuento(l, conDescuentos)}<td style="text-align:right">${eur(importeLinea(l))}</td></tr>`
           )
           .join("") +
-        `<tr><td colspan="${colspan - 1}" style="text-align:right;font-size:11px;color:#666">Subtotal ${cap}</td><td style="text-align:right;font-weight:bold">${eur(sub)}</td></tr>`
+        `<tr><td colspan="${colspan - 1}" style="text-align:right;font-size:11px;color:#666">Subtotal ${esc(cap)}</td><td style="text-align:right;font-weight:bold">${eur(sub)}</td></tr>`
       );
     })
     .join("");
   const base = pres.lineas.reduce((s, l) => s + importeLinea(l), 0);
   const iva = (base * pres.iva) / 100;
-  return `<html><head><meta charset="utf-8"><title>${pres.numero}</title><style>
+  return `<html><head><meta charset="utf-8"><title>${esc(pres.numero)}</title><style>
     body{font-family:Arial,sans-serif;color:#1E2833;margin:36px;font-size:13px}
     h1{color:#1D4E6B;border-bottom:4px solid #E8A020;padding-bottom:6px;font-size:22px}
     table{width:100%;border-collapse:collapse;margin-top:14px}
@@ -87,10 +113,10 @@ function docHTML(pres: PresupuestoDoc, cliente: ClienteDoc, empresa: EmpresaDoc)
     .cab{display:flex;justify-content:space-between;margin-top:10px}
     .firma{margin-top:30px;border-top:1px solid #ccc;padding-top:10px}
   </style></head><body>
-  <h1>PRESUPUESTO ${pres.numero}</h1>
-  <div class="cab"><div><b>${empresa.nombre}</b><br>CIF: ${empresa.cif}<br>${empresa.direccion}<br>${empresa.tel} · ${empresa.email}</div>
-  <div style="text-align:right"><b>Cliente:</b> ${cliente ? cliente.nombre : "—"}<br>${cliente ? cliente.direccion || "" : ""}<br>NIF: ${cliente ? cliente.nif || "" : ""}<br>Fecha: ${pres.fecha}</div></div>
-  <p><b>Obra:</b> ${pres.titulo}</p>
+  <h1>PRESUPUESTO ${esc(pres.numero)}</h1>
+  <div class="cab"><div><b>${esc(empresa.nombre)}</b><br>CIF: ${esc(empresa.cif)}<br>${esc(empresa.direccion)}<br>${esc(empresa.tel)} · ${esc(empresa.email)}</div>
+  <div style="text-align:right"><b>Cliente:</b> ${cliente ? esc(cliente.nombre) : "—"}<br>${cliente ? esc(cliente.direccion || "") : ""}<br>NIF: ${cliente ? esc(cliente.nif || "") : ""}<br>Fecha: ${esc(pres.fecha)}</div></div>
+  <p><b>Obra:</b> ${esc(pres.titulo)}</p>
   <table><thead><tr><th>Concepto</th><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">Precio</th>${conDescuentos ? '<th style="text-align:right">Dto.</th>' : ""}<th style="text-align:right">Importe</th></tr></thead>
   <tbody>${filas}</tbody></table>
   <div class="tot">Base imponible: ${eur(d.base)}${
@@ -98,8 +124,8 @@ function docHTML(pres: PresupuestoDoc, cliente: ClienteDoc, empresa: EmpresaDoc)
       ? `<br>Gastos generales y beneficio industrial (${d.porcentajeMargen} %): ${eur(d.importeMargen)}<br>Suma: ${eur(d.subtotal)}`
       : ""
   }<br>IVA (${pres.iva} %): ${eur(d.importeIva)}<br><b>TOTAL: ${eur(d.total)}</b></div>
-  <p style="margin-top:16px;font-size:11px;color:#666">Presupuesto válido durante 30 días. ${pres.notas || ""}</p>
-  ${pres.firma ? `<div class="firma"><b>Aprobado por el cliente</b> el ${pres.fechaFirma}<br><img src="${pres.firma}" style="height:70px"/></div>` : ""}
+  <p style="margin-top:16px;font-size:11px;color:#666">Presupuesto válido durante 30 días. ${esc(pres.notas || "")}</p>
+  ${pres.firma ? `<div class="firma"><b>Aprobado por el cliente</b> el ${esc(pres.fechaFirma)}<br><img src="${esc(pres.firma)}" style="height:70px"/></div>` : ""}
   </body></html>`;
 }
 
@@ -156,11 +182,11 @@ function docHTMLFactura(fac: FacturaDoc, cliente: ClienteDoc, empresa: EmpresaDo
     ? fac.lineas
         .map(
           (l) =>
-            `<tr><td>${l.concepto}</td><td>${l.descripcion || ""}</td><td style="text-align:right">${l.cantidad} ${l.unidad}</td><td style="text-align:right">${eur(l.precio)}</td>${celdaDescuento(l, conDescuentos)}<td style="text-align:right">${eur(importeLinea(l))}</td></tr>`
+            `<tr><td>${esc(l.concepto)}</td><td>${esc(l.descripcion || "")}</td><td style="text-align:right">${esc(l.cantidad)} ${esc(l.unidad)}</td><td style="text-align:right">${eur(l.precio)}</td>${celdaDescuento(l, conDescuentos)}<td style="text-align:right">${eur(importeLinea(l))}</td></tr>`
         )
         .join("")
-    : `<tr><td colspan="${conDescuentos ? 5 : 4}">${fac.titulo || "Servicios de reforma"}</td><td style="text-align:right">${eur(fac.base)}</td></tr>`;
-  return `<html><head><meta charset="utf-8"><title>${fac.numero}</title><style>
+    : `<tr><td colspan="${conDescuentos ? 5 : 4}">${esc(fac.titulo || "Servicios de reforma")}</td><td style="text-align:right">${eur(fac.base)}</td></tr>`;
+  return `<html><head><meta charset="utf-8"><title>${esc(fac.numero)}</title><style>
     body{font-family:Arial,sans-serif;color:#1E2833;margin:36px;font-size:13px}
     h1{color:#1D4E6B;border-bottom:4px solid #E8A020;padding-bottom:6px;font-size:22px}
     table{width:100%;border-collapse:collapse;margin-top:14px}
@@ -173,12 +199,12 @@ function docHTMLFactura(fac: FacturaDoc, cliente: ClienteDoc, empresa: EmpresaDo
        pie, alguien acabaría entregándoselo a un cliente como si fuera la factura. */
     .aviso{background:#FCF0D8;border:1px solid #EBD9A8;color:#7A5A10;border-radius:6px;padding:8px 10px;font-size:12px;margin:8px 0}
   </style></head><body>
-  <h1>PROPUESTA DE FACTURA ${fac.numero}</h1>
+  <h1>PROPUESTA DE FACTURA ${esc(fac.numero)}</h1>
   <div class="aviso">${AVISO_SIN_VALIDEZ_FISCAL}</div>
-  ${empresa.logo ? `<img src="${empresa.logo}" alt="" style="max-height:60px;max-width:200px;margin-bottom:8px" />` : ""}
-  <div class="cab"><div><b>${empresa.nombre}</b><br>CIF: ${empresa.cif}<br>${empresa.direccion}<br>${empresa.tel} · ${empresa.email}</div>
-  <div style="text-align:right"><b>Cliente:</b> ${cliente ? cliente.nombre : "—"}<br>${cliente ? cliente.direccion || "" : ""}<br>NIF: ${cliente ? cliente.nif || "" : ""}<br>Fecha: ${fac.fecha}</div></div>
-  ${fac.titulo ? `<p><b>Obra:</b> ${fac.titulo}</p>` : ""}
+  ${empresa.logo ? `<img src="${esc(empresa.logo)}" alt="" style="max-height:60px;max-width:200px;margin-bottom:8px" />` : ""}
+  <div class="cab"><div><b>${esc(empresa.nombre)}</b><br>CIF: ${esc(empresa.cif)}<br>${esc(empresa.direccion)}<br>${esc(empresa.tel)} · ${esc(empresa.email)}</div>
+  <div style="text-align:right"><b>Cliente:</b> ${cliente ? esc(cliente.nombre) : "—"}<br>${cliente ? esc(cliente.direccion || "") : ""}<br>NIF: ${cliente ? esc(cliente.nif || "") : ""}<br>Fecha: ${esc(fac.fecha)}</div></div>
+  ${fac.titulo ? `<p><b>Obra:</b> ${esc(fac.titulo)}</p>` : ""}
   <table><thead><tr><th>Concepto</th><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">Precio</th>${conDescuentos ? '<th style="text-align:right">Dto.</th>' : ""}<th style="text-align:right">Importe</th></tr></thead>
   <tbody>${filas}</tbody></table>
   <div class="tot">Base imponible: ${eur(fac.base)}<br>IVA (${fac.iva} %): ${eur(fac.total - fac.base)}<br><b>TOTAL: ${eur(fac.total)}</b></div>

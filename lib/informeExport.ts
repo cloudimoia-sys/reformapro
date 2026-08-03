@@ -29,8 +29,24 @@ export type InformeDoc = {
 };
 
 /** Evita que un pie de foto con < o & rompa el documento generado. */
-function esc(s: string) {
-  return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/**
+ * Escapa para HTML, comillas incluidas.
+ *
+ * Las comillas faltaban, y sí importan: varios valores van dentro de un atributo
+ * —el `src` de las fotos del anexo— y sin escaparlas se sale del atributo y se
+ * puede añadir un `onerror`. El documento se abre con `document.write` en una
+ * ventana del mismo origen, así que ahí se ejecutaría como el propio usuario.
+ *
+ * Y no hace falta mala fe de un empleado: el pie de foto y los apartados del
+ * informe salen muchas veces de texto pegado del correo de un cliente.
+ */
+function esc(s: unknown) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /**
@@ -186,7 +202,7 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc, para
       .map(
         (f, i) => `
       <div style="margin:0 0 14px">
-        <img src="${f.datos}" style="max-width:440px;border:1px solid #ccc" />
+        <img src="${esc(f.datos)}" style="max-width:440px;border:1px solid #ccc" />
         <p style="font-size:11px;color:#444;margin:4px 0 0"><b>Imagen ${i + 1}.</b> ${esc(f.pie)}</p>
       </div>`
       )
@@ -195,13 +211,14 @@ function docHTML(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc, para
 
   const firmante = [inf.perito, inf.titulacion, inf.colegiado ? `Colegiado nº ${inf.colegiado}` : ""]
     .filter(Boolean)
+    .map(esc)
     .join(" · ");
 
   return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><title>${esc(inf.numero)}</title></head>
 <body style="font-family:Georgia,'Times New Roman',serif;font-size:12px;color:#111">
   <table style="width:100%;margin-bottom:14px"><tr>
-    <td>${empresa.logo ? `<img src="${empresa.logo}" style="max-height:56px" />` : `<b style="font-size:17px">${esc(empresa.nombre)}</b>`}</td>
+    <td>${empresa.logo ? `<img src="${esc(empresa.logo)}" style="max-height:56px" />` : `<b style="font-size:17px">${esc(empresa.nombre)}</b>`}</td>
     <td style="text-align:right;font-size:11px;color:#444">
       ${esc(empresa.nombre)}${empresa.cif ? ` · ${esc(empresa.cif)}` : ""}<br/>
       ${esc(empresa.direccion)}<br/>${esc(empresa.tel)} · ${esc(empresa.email)}

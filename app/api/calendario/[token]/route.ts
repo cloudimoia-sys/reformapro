@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prismaUnsafe } from "@/lib/prisma";
+import { consumir, ipDeLaPeticion, limpiarIntentosViejos } from "@/lib/limite";
 import { planificar } from "@/lib/planificacion";
 import { generarICS } from "@/lib/ics";
 
@@ -29,6 +30,24 @@ export async function GET(_req: Request, { params }: { params: { token: string }
   // la base de datos.
   if (token.length < 24) {
     return new NextResponse("No encontrado", { status: 404 });
+  }
+
+  /**
+   * Es la ÚNICA ruta de la aplicación sin sesión, así que es la única a la que
+   * cualquiera puede llamar en bucle. Cada petición consulta la base de datos y
+   * replanifica la obra entera, de modo que sin freno sale barato tumbarla o
+   * inflar la factura de Vercel.
+   *
+   * El tope es generoso a propósito: Google, Apple y Outlook consultan el feed
+   * por su cuenta, y varias personas de la misma obra pueden estar suscritas
+   * desde la misma red. 120 por hora no molesta a nadie que lo use de verdad.
+   */
+  await limpiarIntentosViejos();
+  if (await consumir("ia", `calendario:${ipDeLaPeticion()}`, 120, 60)) {
+    return new NextResponse("Demasiadas peticiones", {
+      status: 429,
+      headers: { "Retry-After": "600" },
+    });
   }
 
   const obra = await prismaUnsafe.obra.findUnique({
