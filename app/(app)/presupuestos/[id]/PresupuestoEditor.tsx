@@ -13,6 +13,7 @@ import {
   agregarLinea,
   agregarMaterialDelCatalogo,
   actualizarLinea,
+  guardarPartidaEnCatalogo,
   borrarLinea,
   guardarFirma,
   marcarEnviado,
@@ -63,6 +64,46 @@ export default function PresupuestoEditor({
   const router = useRouter();
   const [p, setP] = useState(presupuesto);
   const [firmando, setFirmando] = useState(false);
+
+  /**
+   * Partidas ya guardadas en el catálogo en esta sesión, para no ofrecerlo dos
+   * veces sobre la misma línea.
+   */
+  const [guardadas, setGuardadas] = useState<Record<string, string>>({});
+
+  /**
+   * Guarda la línea corregida como partida propia.
+   *
+   * Es el bucle que hace que la aplicación mejore sola: corriges el precio una
+   * vez, lo guardas, y a partir de ahí ese trabajo sale con TU tarifa en lugar
+   * de con una estimación.
+   */
+  const guardarEnCatalogo = async (l: Linea) => {
+    const r = await guardarPartidaEnCatalogo({
+      concepto: l.concepto,
+      descripcion: l.descripcion || "",
+      capitulo: l.capitulo || "",
+      unidad: l.unidad,
+      precio: l.precio,
+    });
+    if (!r.ok) return setError(r.error);
+    setGuardadas((g) => ({ ...g, [l.id]: r.datos === "actualizada" ? "Actualizada" : "Guardada" }));
+  };
+
+  /** Botón de guardar, compartido por la tabla y la ficha de móvil. */
+  const botonCatalogo = (l: Linea) =>
+    bloqueado || !l.concepto.trim() || !(l.precio > 0) ? null : guardadas[l.id] ? (
+      <span className="hint" style={{ color: "var(--ok)" }}>✓ {guardadas[l.id]} en tu catálogo</span>
+    ) : (
+      <button
+        className="btn sm ghost"
+        style={{ fontSize: 11, padding: "2px 7px" }}
+        title="Guardar esta partida con este precio en tu catálogo, para que la IA la reutilice"
+        onClick={() => guardarEnCatalogo(l)}
+      >
+        + A mi catálogo
+      </button>
+    );
 
   // El Server Component padre vuelve a renderizar (con datos frescos de Prisma) cada vez
   // que una Server Action llama a revalidatePath/router.refresh(). useState solo toma el
@@ -279,6 +320,7 @@ export default function PresupuestoEditor({
                     disabled={bloqueado}
                     onBlur={(e) => { setLineaLocal(l.id, { concepto: e.target.value }); commitLinea(l.id, { concepto: e.target.value }); }}
                   />
+                  <div style={{ marginTop: 3 }}>{botonCatalogo(l)}</div>
                 </td>
                 <td className="hidemob" style={{ minWidth: 180 }}>
                   <input
@@ -348,6 +390,7 @@ export default function PresupuestoEditor({
                   placeholder="Concepto"
                   onBlur={(e) => { setLineaLocal(l.id, { concepto: e.target.value }); commitLinea(l.id, { concepto: e.target.value }); }}
                 />
+                <div style={{ marginTop: 4 }}>{botonCatalogo(l)}</div>
               </div>
 
               <input

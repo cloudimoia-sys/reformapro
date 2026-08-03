@@ -291,6 +291,59 @@ const falsos = [
 if (falsos.length) mal("la tirada buena", falsos[0].slice(0, 110));
 else bien("la tirada que estaba bien sigue sin dar ni un aviso");
 
+/**
+ * LAS VENTANAS QUE NADIE PIDIÓ.
+ *
+ * Reportado. Se pidió "colocar 6 puertas de madera maciza, SOLO esto" y llegó
+ * con 12 m² de "Ventana de aluminio o PVC con RPT y vidrio" por 5.040 €: más
+ * del doble que las puertas, y encima se tituló el presupuesto "Cambio de
+ * ventanas y carpintería".
+ *
+ * El marco de una puerta NO es una ventana. En una puerta «block» el premarco,
+ * el marco, el tapajuntas y los herrajes ya van dentro de esa partida — por eso
+ * cuesta 350 €/ud y no 60.
+ */
+console.log("\nLas ventanas que nadie pidió");
+
+const PIDE_PUERTAS = "Colocar 6 puertas de madera maciza, SOLO esto.";
+const conVentanas = [
+  l("Ventana de aluminio o PVC con RPT y vidrio 4/16/6", "Ventana de aluminio", 12, "m²"),
+  l("Puerta de paso block de madera", "Puerta de paso tipo block", 6, "ud"),
+];
+
+const vent = trabajosNoPedidos(PIDE_PUERTAS, conVentanas);
+if (!vent.length) mal("ventanas no pedidas", "no se avisa de 5.040 € de ventanas");
+else if (!/marco/i.test(vent[0])) mal("ventanas no pedidas", "no aclara que el marco de la puerta ya va incluido");
+else bien("avisa de las ventanas y aclara que el marco de la puerta ya va en su partida");
+
+// Si SÍ se piden ventanas, no molesta.
+if (trabajosNoPedidos("Cambiar las ventanas de la vivienda", conVentanas).length) {
+  mal("ventanas pedidas", "avisa aunque sí se hubieran pedido");
+} else {
+  bien("cuando las ventanas sí se piden, no dice nada");
+}
+
+// Y en una obra nueva o una reforma integral entran sin nombrarlas.
+if (trabajosNoPedidos("Reforma integral de la vivienda", conVentanas).length) {
+  mal("reforma integral", "avisa de las ventanas en una reforma integral");
+} else {
+  bien("en una reforma integral las ventanas entran sin nombrarlas");
+}
+
+// Los otros elementos caros, con el mismo criterio.
+for (const [concepto, pedido, etiqueta] of [
+  ["Persiana de aluminio con aislamiento", PIDE_PUERTAS, "persianas"],
+  ["Armario empotrado con interior forrado", PIDE_PUERTAS, "armarios"],
+  ["Calefacción y ACS con aerotermia", PIDE_PUERTAS, "aerotermia"],
+  ["Mobiliario de cocina de gran superficie", PIDE_PUERTAS, "mobiliario de cocina"],
+] as const) {
+  if (!trabajosNoPedidos(pedido, [l(concepto, "", 1, "ud")]).length) {
+    mal(etiqueta, "no se avisa");
+  } else {
+    bien(`avisa de ${etiqueta} sin pedir`);
+  }
+}
+
 console.log(
   fallos
     ? `\nSOBRANTES INCORRECTO — ${fallos} ${fallos === 1 ? "fallo" : "fallos"}`
