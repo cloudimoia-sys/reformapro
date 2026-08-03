@@ -376,14 +376,16 @@ def contenido():
     s += [Paragraph("7. Facturación", E["h1"])]
     s += [
         p(
-            "<b>ReformaPro no emite facturas, las prepara.</b> Desde un presupuesto "
-            "aprobado, «Pasar a facturación» crea una <b>propuesta</b> con todo listo, y de "
-            "ahí la exportas a tu programa de gestión o a tu gestoría."
+            "<b>ReformaPro no emite facturas.</b> Desde un presupuesto aprobado, «Generar "
+            "parte de obra» crea el detalle de lo ejecutado —medido y valorado— para que la "
+            "factura la emita tu programa o tu gestoría. Es el mismo papel que cumple un "
+            "albarán, y por eso encaja sin que nadie cambie de costumbres."
         ),
-        p("Tienes tres salidas:"),
-        punto("<b>Facturae (XML)</b>: el formato estándar en España, que importan casi todos los programas."),
-        punto("<b>CSV</b>: más burdo y funciona más veces. Si el XML se atraganta, tira de este."),
-        punto("<b>Exportar todo a CSV</b>: el mes entero de una vez, para pasárselo a la gestoría."),
+        p("Salidas, por orden de utilidad real:"),
+        punto("<b>Excel</b>: empieza por aquí. Lo abre cualquiera, se lee de un vistazo y se copia. Es lo que de verdad usa quien luego hace la factura."),
+        punto("<b>Exportar todo a Excel</b>: el mes entero de una vez, para pasárselo a la gestoría."),
+        punto("<b>PDF y Word</b>: el parte para leer o firmar."),
+        punto("<b>Facturae (XML)</b>: el estándar español. Algunos programas lo importan y otros ni lo miran — pruébalo una vez con el tuyo antes de contar con ello."),
         Spacer(1, 2 * mm),
         aviso(
             "<b>Por qué no factura.</b> Emitir facturas en España es una actividad regulada: "
@@ -393,7 +395,7 @@ def contenido():
             "es teclear los datos dos veces."
         ),
         p(
-            "El PDF de la propuesta lleva impreso que <b>no tiene validez fiscal</b>. No se "
+            "El PDF del parte lleva impreso que <b>no tiene validez fiscal</b>. No se "
             "lo entregues a un cliente como si fuera la factura."
         ),
     ]

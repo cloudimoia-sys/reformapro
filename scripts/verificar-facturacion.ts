@@ -14,6 +14,7 @@
  *
  * Ejecutar con: npx tsx scripts/verificar-facturacion.ts
  */
+import { readFileSync } from "node:fs";
 import {
   AVISO_SIN_VALIDEZ_FISCAL,
   aCSV,
@@ -51,7 +52,7 @@ const CLIENTE: ParteFactura = {
 };
 
 const PROPUESTA: PropuestaFactura = {
-  numero: "PROP-2026-004",
+  numero: "ALB-2026-004",
   fecha: "2026-08-02",
   titulo: 'Reforma de baño "El Pinar" & anexo',
   base: 4000,
@@ -75,9 +76,28 @@ if (!/sin validez fiscal/i.test(AVISO_SIN_VALIDEZ_FISCAL)) {
 } else {
   bien("existe un aviso explícito de que no es una factura");
 }
-// El número de la propuesta no puede parecer una serie fiscal de facturas.
-if (/^FAC-/.test(PROPUESTA.numero)) mal("numeración", "la serie empieza por FAC, que se lee como serie de facturas");
-else bien(`la serie es "${PROPUESTA.numero}", no una serie de facturas`);
+// Y además dice qué SÍ es. "No es una factura" a secas deja al que lo recibe
+// sin saber qué hacer con el papel; nombrarlo albarán le dice que lo pase a
+// factura como lleva años haciendo.
+if (!/albar[áa]n/i.test(AVISO_SIN_VALIDEZ_FISCAL)) {
+  mal("aviso", "no explica que es el equivalente a un albarán, que es lo que sabe manejar quien factura");
+} else {
+  bien("el aviso dice qué es, no solo qué no es: un albarán para quien emite la factura");
+}
+
+/*
+ * El prefijo de la serie se comprueba sobre el código, no sobre este fixture.
+ *
+ * Antes se miraba `PROPUESTA.numero`, que es una constante de esta misma prueba:
+ * pasaba siempre, dijera lo que dijera `lib/counter.ts`. Se lee el fichero como
+ * texto a propósito, para no arrastrar el cliente de base de datos que importa
+ * `counter.ts` solo por leer una tabla de tres prefijos.
+ */
+const fuenteCounter = readFileSync(new URL("../lib/counter.ts", import.meta.url), "utf8");
+const prefijoFactura = fuenteCounter.match(/factura:\s*"([A-Z]+)"/)?.[1];
+if (!prefijoFactura) mal("numeración", "no encuentro el prefijo de la serie en lib/counter.ts");
+else if (prefijoFactura === "FAC") mal("numeración", 'la serie empieza por "FAC", que se lee como serie fiscal de facturas');
+else bien(`la serie del traspaso usa el prefijo "${prefijoFactura}", que no se lee como serie de facturas`);
 
 // ─────────────────────────── Datos que faltan ───────────────────────────
 console.log("\nSe avisa de lo que falta antes de generar nada");

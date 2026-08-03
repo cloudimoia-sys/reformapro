@@ -22,8 +22,17 @@
  * Nada de lo que se genera aquí es una factura ni lo aparenta.
  */
 
+/**
+ * El documento se presenta como PARTE DE OBRA, no como propuesta de factura.
+ *
+ * El cambio es de palabras y vale más que cualquier formato: una administrativa
+ * lleva años pasando albaranes a facturas, y ese gesto ya lo tiene aprendido. Un
+ * "parte de obra ejecutada" entra en su flujo sin pedirle que cambie nada; una
+ * "propuesta de factura" suena a que le pisan el trabajo y a que hay que
+ * aprenderse otro programa.
+ */
 export const AVISO_SIN_VALIDEZ_FISCAL =
-  "Documento sin validez fiscal. No es una factura: es la propuesta con los datos para emitirla desde tu programa de facturación.";
+  "Parte de obra ejecutada, sin validez fiscal. No es una factura: es el detalle de lo ejecutado para que la factura la emita el programa de facturación, igual que se hace con un albarán.";
 
 export type LineaFactura = {
   concepto: string;

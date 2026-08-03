@@ -41,11 +41,16 @@ type ClienteConCounter = {
  * ante Hacienda. Aquí se numeran PROPUESTAS, y su número es una referencia
  * interna para cruzar con ese programa.
  *
- * Las que ya existan con "FAC-" se quedan como están: reescribirlas sería
- * falsear un histórico. La serie deja de ser fiscal, así que mezclar prefijos no
- * tiene ninguna consecuencia.
+ * "ALB" de albarán, que es como lo llama quien luego lo factura. Se probó antes
+ * con "PROP" de propuesta, pero esa palabra le suena a la administrativa a que
+ * alguien le está haciendo su trabajo; "albarán" le suena a lo que lleva años
+ * pasando a factura sin pensarlo.
+ *
+ * Las series antiguas se quedan como están: reescribirlas sería falsear un
+ * histórico, y al no ser una serie fiscal, mezclar prefijos no tiene ninguna
+ * consecuencia.
  */
-const PREFIJOS = { presupuesto: "PRE", factura: "PROP", informe: "INF" } as const;
+const PREFIJOS = { presupuesto: "PRE", factura: "ALB", informe: "INF" } as const;
 
 export async function siguienteNumero(
   empresaId: string,

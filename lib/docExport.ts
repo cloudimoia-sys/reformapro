@@ -199,7 +199,7 @@ function docHTMLFactura(fac: FacturaDoc, cliente: ClienteDoc, empresa: EmpresaDo
        pie, alguien acabaría entregándoselo a un cliente como si fuera la factura. */
     .aviso{background:#FCF0D8;border:1px solid #EBD9A8;color:#7A5A10;border-radius:6px;padding:8px 10px;font-size:12px;margin:8px 0}
   </style></head><body>
-  <h1>PROPUESTA DE FACTURA ${esc(fac.numero)}</h1>
+  <h1>PARTE DE OBRA EJECUTADA ${esc(fac.numero)}</h1>
   <div class="aviso">${AVISO_SIN_VALIDEZ_FISCAL}</div>
   ${empresa.logo ? `<img src="${esc(empresa.logo)}" alt="" style="max-height:60px;max-width:200px;margin-bottom:8px" />` : ""}
   <div class="cab"><div><b>${esc(empresa.nombre)}</b><br>CIF: ${esc(empresa.cif)}<br>${esc(empresa.direccion)}<br>${esc(empresa.tel)} · ${esc(empresa.email)}</div>
@@ -229,7 +229,7 @@ export function exportFacturaWord(fac: FacturaDoc, cliente: ClienteDoc, empresa:
 
 export function exportFacturaExcel(fac: FacturaDoc) {
   const rows = [
-    ["Propuesta de factura", fac.numero],
+    ["Parte de obra ejecutada", fac.numero],
     ["Aviso", AVISO_SIN_VALIDEZ_FISCAL],
     ["Obra", fac.titulo || ""],
     ["Fecha", fac.fecha],
@@ -246,7 +246,7 @@ export function exportFacturaExcel(fac: FacturaDoc) {
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws["!cols"] = [{ wch: 28 }, { wch: 44 }, { wch: 10 }, { wch: 8 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Propuesta");
+  XLSX.utils.book_append_sheet(wb, ws, "Parte de obra");
   XLSX.writeFile(wb, `${fac.numero}.xlsx`);
 }
 
@@ -284,4 +284,37 @@ export function exportCSVFacturacion(
   nombre: string
 ) {
   descargar(aCSV(filasCSV(propuestas)), nombre, "text/csv;charset=utf-8");
+}
+
+/**
+ * Exporta varios partes de obra a una hoja de Excel.
+ *
+ * ES LA SALIDA PRINCIPAL, y la razón es una conversación real con una
+ * administrativa: en su programa pasa albaranes a facturas y no le suena poder
+ * importar un XML. La importación existe en casi todos los programas, pero está
+ * enterrada, cada uno pide su formato y —lo que decide— si quien lo usa no sabe
+ * que existe, no existe.
+ *
+ * Un Excel lo abre, lo mira y copia. Sin importar nada, sin aprender nada y sin
+ * llamar al soporte de su programa. Facturae se mantiene porque no cuesta nada y
+ * algún programa sí lo toma, pero deja de ser lo primero que se ofrece.
+ */
+export function exportExcelFacturacion(
+  propuestas: (PropuestaFactura & { cliente: ParteFactura | null; estado: string })[],
+  nombre: string
+) {
+  const filas = filasCSV(propuestas);
+  const ws = XLSX.utils.aoa_to_sheet(filas);
+  // Anchos pensados para que se lea sin tocar nada al abrirlo.
+  ws["!cols"] = [
+    { wch: 15 }, { wch: 11 }, { wch: 26 }, { wch: 24 }, { wch: 12 }, { wch: 26 },
+    { wch: 8 }, { wch: 16 }, { wch: 14 }, { wch: 30 }, { wch: 40 }, { wch: 9 },
+    { wch: 7 }, { wch: 13 }, { wch: 10 }, { wch: 13 }, { wch: 14 }, { wch: 7 },
+    { wch: 11 }, { wch: 12 }, { wch: 9 },
+  ];
+  // Fila de cabecera congelada: con veinte columnas, sin esto se pierde el norte.
+  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Partes de obra");
+  XLSX.writeFile(wb, nombre);
 }

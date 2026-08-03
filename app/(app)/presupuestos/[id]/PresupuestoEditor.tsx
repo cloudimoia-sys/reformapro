@@ -208,7 +208,7 @@ export default function PresupuestoEditor({
               if (e) setError(e);
             }}
           >
-            Pasar a facturación
+            Generar parte de obra
           </button>
         )}
       </div>

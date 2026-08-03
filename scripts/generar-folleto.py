@@ -132,7 +132,8 @@ def pagina_1():
         p(
             "Presupuestar a mano son una o dos horas por obra, y aun así se escapan "
             "partidas. ReformaPro las escribe por ti <b>con tus precios</b>, avisa de lo que "
-            "falta, y de ahí salen los informes, la planificación y los datos para facturar."
+            "falta, y de ahí salen los informes, la planificación y el parte de obra para "
+            "quien te factura."
         ),
         Spacer(1, 5 * mm),
         Paragraph("<b>Lo que de verdad cambia</b>", E["ladillo"]),
@@ -185,7 +186,7 @@ def pagina_2():
         "Diagnóstico de patologías por foto",
         "Copiloto técnico de normativa y cálculos",
         "Obras y planificación, con calendario",
-        "Traspaso a facturación (Facturae y CSV)",
+        "Partes de obra ejecutada, exportados a Excel para quien factura",
         "Hasta 5 usuarios",
         "Soporte prioritario",
     ]
@@ -288,9 +289,11 @@ def pagina_3():
             "sorpresa después."
         ),
         punto(
-            "<b>No emite facturas.</b> Emitirlas es una actividad regulada y la hace tu "
-            "programa de facturación o tu gestoría. ReformaPro prepara los datos y te los "
-            "exporta en formato Facturae o CSV para que los importen sin teclear."
+            "<b>No emite facturas ni sustituye a tu programa de gestión.</b> Emitirlas es "
+            "una actividad regulada. ReformaPro genera el <b>parte de obra ejecutada</b> —lo "
+            "hecho, medido y valorado— y lo exporta a Excel, que es lo que abre cualquiera "
+            "sin aprender nada. Tu gestoría o tu administrativa lo pasan a factura con el "
+            "mismo gesto con el que llevan años pasando albaranes."
         ),
         punto(
             "<b>No sustituye a un técnico.</b> Los documentos que exigen firma la exigen "

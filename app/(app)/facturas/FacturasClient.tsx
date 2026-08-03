@@ -10,6 +10,7 @@ import {
   exportFacturaExcel,
   exportFacturae,
   exportCSVFacturacion,
+  exportExcelFacturacion,
   type ClienteDoc,
   type EmpresaDoc,
   type LineaDoc,
@@ -35,8 +36,12 @@ type Propuesta = {
  *
  * ReformaPro NO emite facturas: emitirlas es una actividad regulada (Verifactu) y
  * la sanción por comercializar software no conforme recae sobre el fabricante.
- * Lo que hay aquí son PROPUESTAS con los datos listos para que las emita el
- * programa de facturación que el cliente ya tiene.
+ * Lo que hay aquí son PARTES DE OBRA EJECUTADA: el detalle de lo hecho, medido y
+ * valorado, para que la factura la emita el programa que el cliente ya tiene.
+ *
+ * El nombre importa más que el formato. Una administrativa lleva años pasando
+ * albaranes a facturas; un "parte de obra" entra en ese gesto sin pedirle que
+ * cambie nada, y una "propuesta de factura" suena a que le pisan el trabajo.
  *
  * La pantalla lo dice, y el PDF lleva el aviso impreso: si solo estuviera escrito
  * aquí, alguien acabaría entregándole el PDF a un cliente creyendo que es la
@@ -77,6 +82,21 @@ export default function FacturasClient({
 
   const descargarFacturae = (p: Propuesta) => setFaltan(exportFacturae(comoDoc(p), emisor, p.cliente));
 
+  /**
+   * Excel es la salida principal.
+   *
+   * Sale de una conversación con una administrativa: en su programa pasa
+   * albaranes a facturas y no le suena poder importar un XML. Un Excel lo abre,
+   * lo mira y copia — sin importar nada y sin aprender nada.
+   */
+  const descargarTodoExcel = () => {
+    if (!propuestas.length) return;
+    exportExcelFacturacion(
+      propuestas.map((p) => ({ ...comoDoc(p), cliente: p.cliente, estado: p.estado })),
+      `partes-de-obra-${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+  };
+
   const descargarTodo = () => {
     if (!propuestas.length) return;
     exportCSVFacturacion(
@@ -93,16 +113,21 @@ export default function FacturasClient({
         <h2 style={{ fontSize: 22, margin: 0 }}>Facturación</h2>
         <div className="spacer" />
         {!!propuestas.length && (
-          <button className="btn amber" onClick={descargarTodo}>
-            Exportar todo a CSV
-          </button>
+          <>
+            <button className="btn amber" onClick={descargarTodoExcel}>
+              Exportar todo a Excel
+            </button>
+            <button className="btn sm ghost" onClick={descargarTodo}>
+              CSV
+            </button>
+          </>
         )}
       </div>
 
       <p className="hint" style={{ marginTop: 0 }}>
-        Aquí no se emiten facturas: <strong>se preparan</strong>. Emitirlas es una actividad regulada y la hace tu
-        programa de facturación o tu gestoría, que son quienes numeran, guardan el registro y responden ante Hacienda.
-        ReformaPro pone el trabajo medido y valorado, y te lo exporta para que lo importen sin teclear nada.
+        Aquí no se emiten facturas: se generan <strong>partes de obra ejecutada</strong>. Emitir la factura es una
+        actividad regulada y la hace tu programa de facturación o tu gestoría, igual que llevan haciendo siempre con un
+        albarán. ReformaPro pone el trabajo medido y valorado; ellos lo pasan a factura.
       </p>
 
       {!!faltan.length && (
@@ -160,10 +185,7 @@ export default function FacturasClient({
                   <span className={`badge ${estadoClase(p.estado)}`}>{estadoLabel(p.estado)}</span>
                 </td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                  <button className="btn sm" onClick={() => descargarFacturae(p)} title="XML estándar para importar">
-                    Facturae
-                  </button>{" "}
-                  <button className="btn sm ghost" onClick={() => exportFacturaExcel(comoDoc(p))}>
+                  <button className="btn sm" onClick={() => exportFacturaExcel(comoDoc(p))}>
                     Excel
                   </button>{" "}
                   <button
@@ -178,6 +200,13 @@ export default function FacturasClient({
                   >
                     Word
                   </button>{" "}
+                  <button
+                    className="btn sm ghost"
+                    onClick={() => descargarFacturae(p)}
+                    title="XML del estándar Facturae. Solo si tu programa lo admite."
+                  >
+                    Facturae
+                  </button>{" "}
                   {p.estado !== "PAGADA" && (
                     <button className="btn sm" onClick={() => marcarCobrada(p.id)}>
                       Marcar cobrada
@@ -189,7 +218,7 @@ export default function FacturasClient({
             {!propuestas.length && (
               <tr>
                 <td colSpan={7} className="hint">
-                  Nada pendiente de facturar. Las propuestas se crean desde un presupuesto aprobado.
+                  Nada pendiente de facturar. Los partes de obra se crean desde un presupuesto aprobado.
                 </td>
               </tr>
             )}
@@ -198,9 +227,10 @@ export default function FacturasClient({
       </div>
 
       <p className="hint" style={{ marginTop: 10 }}>
-        <strong>Facturae</strong> es el formato XML estándar en España y lo importan casi todos los programas de
-        gestión. Va sin firma electrónica a propósito: la firma la pone quien emite la factura, con su certificado.{" "}
-        <strong>CSV</strong> es más burdo y funciona más veces — si tu programa se atraganta con el XML, tira de ese.
+        <strong>Empieza por el Excel.</strong> Es lo que abre cualquiera sin aprender nada, y es lo que de verdad usa
+        quien luego hace la factura. <strong>Facturae</strong> es el XML del estándar español: algunos programas lo
+        importan y otros ni lo miran, así que pruébalo una vez con el tuyo antes de contar con ello. Va sin firma a
+        propósito — la firma la pone quien emite la factura, con su certificado.
       </p>
     </div>
   );
