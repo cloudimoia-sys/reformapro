@@ -35,6 +35,27 @@ if (!enVercel) {
   process.exit(0);
 }
 
+/**
+ * NEXTAUTH_URL apuntando a una URL de rama es un fallo silencioso y caro.
+ *
+ * Pasó: estaba puesta a `reformapro-git-main-....vercel.app`, que Vercel protege
+ * con su propio inicio de sesión. Pulsar "Salir" llevaba a la pantalla de acceso
+ * DE VERCEL, y los enlaces de recuperar contraseña llegaban al correo apuntando
+ * ahí, así que nadie podía recuperar su cuenta. Ninguna de las dos cosas daba
+ * error en ningún sitio.
+ *
+ * El código ya no depende de esta variable para esas dos cosas, pero NextAuth sí
+ * la usa internamente, así que conviene enterarse.
+ */
+if (/-git-|\.vercel\.app$/.test(process.env.NEXTAUTH_URL || "") && /-git-/.test(process.env.NEXTAUTH_URL || "")) {
+  console.warn(
+    "\n  AVISO: NEXTAUTH_URL apunta a una URL de RAMA:\n" +
+      `    ${process.env.NEXTAUTH_URL}\n` +
+      "  Esas URL están protegidas por el inicio de sesión de Vercel. Ponla al\n" +
+      "  dominio de producción en Settings → Environment Variables.\n"
+  );
+}
+
 if (!process.env.DIRECT_URL) {
   console.error(
     "\nFALTA DIRECT_URL — build detenido.\n\n" +

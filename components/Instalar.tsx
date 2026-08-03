@@ -30,14 +30,9 @@ export default function Instalar() {
   const [oculto, setOculto] = useState(true);
 
   useEffect(() => {
-    // El service worker se registra siempre; el botón es otra cosa.
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {
-        // Si falla, la aplicación funciona igual: el service worker solo mejora
-        // el arranque y da la pantalla de sin conexión.
-      });
-    }
-
+    // El service worker lo registra el script en línea de app/layout.tsx, que
+    // corre en todas las páginas y antes de que React hidrate. Aquí solo se
+    // decide si se enseña el aviso.
     const yaInstalada =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as { standalone?: boolean }).standalone === true;
@@ -51,13 +46,29 @@ export default function Instalar() {
       return;
     }
 
-    const alPoder = (e: Event) => {
-      e.preventDefault(); // sin esto, Chrome muestra su propia barra y perdemos el control
-      setEvento(e as EventoInstalacion);
+    /**
+     * El evento puede haber ocurrido YA.
+     *
+     * `beforeinstallprompt` se dispara antes de que React hidrate, así que
+     * escuchar desde aquí llega tarde. El script en línea lo guarda en
+     * `window.__instalable` y avisa con un evento propio; se comprueban las dos
+     * cosas, por si acaso.
+     */
+    const guardado = (window as { __instalable?: EventoInstalacion }).__instalable;
+    if (guardado) {
+      setEvento(guardado);
+      setOculto(false);
+      return;
+    }
+
+    const alPoder = () => {
+      const e = (window as { __instalable?: EventoInstalacion }).__instalable;
+      if (!e) return;
+      setEvento(e);
       setOculto(false);
     };
-    window.addEventListener("beforeinstallprompt", alPoder);
-    return () => window.removeEventListener("beforeinstallprompt", alPoder);
+    window.addEventListener("reformapro:instalable", alPoder);
+    return () => window.removeEventListener("reformapro:instalable", alPoder);
   }, []);
 
   const cerrar = () => {

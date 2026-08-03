@@ -57,9 +57,40 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+/**
+ * Arranque de la instalación, en línea y en TODAS las páginas.
+ *
+ * Dos motivos para que esté aquí y no dentro del componente de React:
+ *
+ *  1. El service worker se registraba solo después de entrar, dentro del área
+ *     con sesión. Pero el navegador decide si una web es instalable AL CARGAR la
+ *     página, y la primera que carga cualquiera es /login: sin service worker en
+ *     ese momento, no la daba por instalable y no ofrecía instalar nunca.
+ *
+ *  2. `beforeinstallprompt` se dispara muy pronto, normalmente antes de que
+ *     React haya hidratado. Si el único que escucha es un componente, el evento
+ *     ya ha pasado cuando llega. Aquí se guarda en cuanto ocurre y el componente
+ *     lo recoge cuando monta.
+ */
+const ARRANQUE_PWA = `
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js').catch(function () {});
+  });
+}
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault();
+  window.__instalable = e;
+  window.dispatchEvent(new Event('reformapro:instalable'));
+});
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={`${barlow.variable} ${barlowCondensed.variable}`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: ARRANQUE_PWA }} />
+      </head>
       <body>{children}</body>
     </html>
   );

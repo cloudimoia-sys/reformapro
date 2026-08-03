@@ -3,6 +3,7 @@
 import crypto from "crypto";
 import { prismaUnsafe } from "@/lib/prisma";
 import { enviarEmail, emailRestablecer } from "@/lib/email";
+import { urlBase } from "@/lib/urlBase";
 
 const VALIDEZ_MS = 60 * 60 * 1000; // 1 hora
 
@@ -40,7 +41,10 @@ export async function pedirRestablecer(email: string) {
       },
     });
 
-    const base = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    // Del host real de la petición, NO de NEXTAUTH_URL: esa variable estuvo
+    // apuntando a la URL de rama protegida por Vercel y los enlaces de
+    // recuperación no llevaban a ninguna parte, sin que nadie lo notara.
+    const base = urlBase();
     const plantilla = emailRestablecer(usuario.nombre, `${base}/restablecer/${token}`);
     try {
       await enviarEmail({ para: usuario.email, ...plantilla });

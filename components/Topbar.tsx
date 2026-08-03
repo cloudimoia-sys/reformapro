@@ -21,6 +21,25 @@ const TABS_ADMIN: [string, string][] = [
   ["/empresa", "Mi empresa"],
 ];
 
+/**
+ * Cierra la sesión sin dejar que NextAuth decida a dónde va el usuario.
+ *
+ * ANTES: `signOut({ callbackUrl: "/login" })`. NextAuth resuelve las rutas
+ * relativas contra NEXTAUTH_URL, y esa variable estaba apuntando a la URL de
+ * rama del despliegue (`...-git-main-....vercel.app`) en lugar de al dominio de
+ * producción. Resultado: al pulsar Salir, el usuario aterrizaba en la pantalla
+ * de inicio de sesión DE VERCEL. Delante de un cliente, eso parece que la
+ * aplicación se ha roto.
+ *
+ * AHORA se cierra la sesión sin redirección y se navega a mano al /login del
+ * dominio en el que está el usuario. Da igual lo que valga NEXTAUTH_URL: acaba
+ * donde tiene que acabar.
+ */
+async function salir() {
+  await signOut({ redirect: false });
+  window.location.assign("/login");
+}
+
 export default function Topbar({
   nombre,
   rol,
@@ -54,7 +73,7 @@ export default function Topbar({
         <button
           className="btn sm ghost"
           style={{ color: "#fff", borderColor: "#ffffff55" }}
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={salir}
         >
           Salir
         </button>
