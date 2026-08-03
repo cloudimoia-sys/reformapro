@@ -93,7 +93,8 @@ console.log("\nParedes medidas por lo bajo");
  * así que 10 m² de panel es menos de la mitad de la pared.
  */
 const corta = [l("Solado de gres porcelánico", "", 7.1, "m²"), l("Panel decorativo de pared", "", 10, "m²")];
-const aviso = paredesCortas(corta);
+const PIDE_TODA_LA_PARED = "Panelar toda la pared del baño y solar el suelo.";
+const aviso = paredesCortas(corta, PIDE_TODA_LA_PARED);
 if (!aviso.length) {
   mal("pared corta", "10 m² de panel con 7,1 m² de suelo no salta");
 } else if (!/2[5-7]/.test(aviso[0])) {
@@ -102,14 +103,14 @@ if (!aviso.length) {
   bien("avisa de que 10 m² de pared es imposible con 7,1 m² de suelo, y dice cuánto sería");
 }
 
-if (paredesCortas([l("Solado de gres porcelánico", "", 7.1, "m²"), l("Panel decorativo de pared", "", 24, "m²")]).length) {
+if (paredesCortas([l("Solado de gres porcelánico", "", 7.1, "m²"), l("Panel decorativo de pared", "", 24, "m²")], PIDE_TODA_LA_PARED).length) {
   mal("pared bien medida", "avisa sin motivo");
 } else {
   bien("con la pared bien medida no dice nada");
 }
 
 // Sin solado no hay con qué comparar: mejor callarse que inventarse una regla.
-if (paredesCortas([l("Panel decorativo de pared", "", 4, "m²")]).length) {
+if (paredesCortas([l("Panel decorativo de pared", "", 4, "m²")], PIDE_TODA_LA_PARED).length) {
   mal("sin suelo de referencia", "avisa sin tener con qué comparar");
 } else {
   bien("sin solado con el que comparar, no se inventa el aviso");
@@ -177,9 +178,74 @@ const falsoAcabado = acabadosIncompatibles(conDemolicion);
 if (falsoAcabado.length) mal("demolición contada como acabado", falsoAcabado[0].slice(0, 90));
 else bien("picar un alicatado no cuenta como poner un alicatado");
 
-const falsoSuelo = paredesCortas(conDemolicion);
+const falsoSuelo = paredesCortas(conDemolicion, PIDE_TODA_LA_PARED);
 if (falsoSuelo.length) mal("suelo de referencia", falsoSuelo[0].slice(0, 100));
 else bien("el suelo de referencia es el que se pone (7 m²), no el que se pica (33)");
+
+/**
+ * EL CASO REPORTADO, con la frase literal del usuario.
+ *
+ * "Alicatar suelos de todo el baño. Sustituir plato de ducha, poner mampara,
+ * cambiar WC y lavabo. Pintar paredes y poner panel decorativo para duchas."
+ *
+ * El presupuesto que salió estaba BIEN: alicatado al suelo, pintura en las
+ * paredes y panel solo en la ducha. Y aun así saltaron tres avisos, los tres
+ * falsos:
+ *
+ *   - "Alicatado de suelos" se contó como alicatado de PARED, porque la palabra
+ *     es la misma. Medio país llama alicatar a poner baldosa en cualquier sitio.
+ *   - "Pintura en paramentos no alicatados" también, porque la DESCRIPCIÓN
+ *     contiene la palabra "alicatados".
+ *   - El panel de la ducha, 3,5 m², se midió con el criterio de una pared entera.
+ *
+ * Pintar la pared y panelar la ducha no es un conflicto: es lo que se hace en
+ * cualquier baño. De ahí las dos correcciones: mirar el CONCEPTO y no toda la
+ * línea, y no opinar de la medición salvo que se haya pedido la pared entera.
+ */
+console.log("\nEl caso reportado: alicatar SUELOS y panelar la ducha");
+
+const PEDIDO_REAL =
+  "Alicatar suelos de todo el baño. Sustituir plato de ducha, poner mampara, " +
+  "cambiar WC y lavabo. Pintar paredes y poner panel decorativo para duchas.";
+
+const presupuestoReal = [
+  l("Alicatado de suelos", "Solado con baldosa cerámica en todo el baño", 7.1, "m²"),
+  l("Pintura plástica lisa en paramentos", "Pintura sobre paramentos no alicatados", 10, "m²"),
+  l("Panel decorativo de pared", "Panel para la zona de ducha", 3.5, "m²"),
+  l("Sustitución de plato de ducha", "Retirada y montaje del nuevo plato"),
+  l("Mampara de ducha", "Suministro y montaje"),
+];
+
+const inc = acabadosIncompatibles(presupuestoReal);
+if (inc.length) mal("acabados incompatibles", inc[0].slice(0, 110));
+else bien("alicatar el SUELO y panelar la ducha no cuenta como dos acabados de pared");
+
+const cortas = paredesCortas(presupuestoReal, PEDIDO_REAL);
+if (cortas.length) mal("paredes cortas", cortas[0].slice(0, 110));
+else bien("un panel de 3,5 m² para la ducha no se mide con el criterio de una pared entera");
+
+// Nombrar el alicatado dentro de una descripción no convierte esa partida en un
+// alicatado.
+const porLaDescripcion = [
+  l("Pintura plástica", "Sobre paramentos no alicatados", 20, "m²"),
+  l("Panel decorativo de pared", "En todos los paramentos", 5, "m²"),
+];
+if (acabadosIncompatibles(porLaDescripcion).length) {
+  mal("palabra en la descripción", "una palabra de la descripción convierte la partida en otra cosa");
+} else {
+  bien("mencionar el alicatado en una descripción no convierte esa partida en un alicatado");
+}
+
+// Pero el caso que SÍ es un problema se sigue detectando.
+const dosDeVerdad = [
+  l("Alicatado de paredes con azulejo", "Alicatado de los paramentos del baño", 22, "m²"),
+  l("Panel decorativo de pared", "Panel en todos los paramentos", 22, "m²"),
+];
+if (!acabadosIncompatibles(dosDeVerdad).length) {
+  mal("dos acabados reales", "ya no se detecta el caso que sí es un problema");
+} else {
+  bien("dos acabados generales sobre la misma pared se siguen detectando");
+}
 
 console.log(
   fallos

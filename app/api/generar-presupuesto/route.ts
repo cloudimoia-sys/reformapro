@@ -302,7 +302,7 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
     }));
     avisos.push(...trabajosNoPedidos(pedido, paraRevisar));
     avisos.push(...acabadosIncompatibles(paraRevisar));
-    avisos.push(...paredesCortas(paraRevisar));
+    avisos.push(...paredesCortas(paraRevisar, pedido));
     avisos.push(...descripcionesVacias(paraRevisar));
 
     return NextResponse.json({ lineas: finales, partidasPropiasAplicadas: aplicadas, avisos });
