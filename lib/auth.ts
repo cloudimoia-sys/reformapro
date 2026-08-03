@@ -42,7 +42,7 @@ export const authOptions: AuthOptions = {
         if (!credentials?.email || !credentials?.password) return null;
 
         const email = credentials.email.toLowerCase().trim();
-        const ip = ipDeLaPeticion();
+        const ip = await ipDeLaPeticion();
         await limpiarIntentosViejos();
 
         /**

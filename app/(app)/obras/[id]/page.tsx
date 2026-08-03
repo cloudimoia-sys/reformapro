@@ -6,12 +6,14 @@ import ObraEditor from "./ObraEditor";
 
 export const dynamic = "force-dynamic";
 
-export default async function ObraPage({ params }: { params: { id: string } }) {
+export default async function ObraPage({ params }: { params: Promise<{ id: string }> }) {
+  // Desde Next 15, los params de una ruta llegan como promesa.
+  const { id } = await params;
   const { db } = await requireTenant();
 
   const [obra, clientes] = await Promise.all([
     db.obra.findFirst({
-      where: { id: params.id },
+      where: { id: id },
       include: {
         cliente: { select: { id: true, nombre: true } },
         presupuesto: { select: { id: true, numero: true } },
@@ -35,7 +37,7 @@ export default async function ObraPage({ params }: { params: { id: string } }) {
    * y entonces se le da al cliente un enlace que no responde. Así siempre apunta
    * a donde está corriendo la aplicación.
    */
-  const h = headers();
+  const h = await headers();
   const host = h.get("x-forwarded-host") || h.get("host") || "";
   const protocolo = host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https";
   const urlCalendario = `${protocolo}://${host}/api/calendario/${obra.tokenCalendario}`;

@@ -73,7 +73,7 @@ export async function registrarEmpresa(data: RegistroInput): Promise<ResultadoRe
   }
 
   await limpiarIntentosViejos();
-  const ipHash = hashClave(`registro:${ipDeLaPeticion()}`);
+  const ipHash = hashClave(`registro:${(await ipDeLaPeticion())}`);
   if (await superaElLimite(ipHash)) {
     return { ok: false, error: "Se han creado demasiadas cuentas desde aquí. Prueba dentro de un rato." };
   }
@@ -110,7 +110,7 @@ export async function registrarEmpresa(data: RegistroInput): Promise<ResultadoRe
   // Se apunta AQUI, no antes: solo cuentan las altas conseguidas. Antes se contaba
   // cualquier intento, así que equivocarse tecleando el email gastaba el cupo y
   // dejaba a quien se registra bloqueado una hora por un despiste.
-  await anotarIntento("registro", ipDeLaPeticion());
+  await anotarIntento("registro", (await ipDeLaPeticion()));
 
   return { ok: true };
 }

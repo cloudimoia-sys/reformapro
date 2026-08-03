@@ -23,8 +23,12 @@ export const dynamic = "force-dynamic";
  * fechas. Ni cliente, ni importes, ni presupuesto. Quien consiga la URL ve un
  * calendario de trabajos, no la contabilidad.
  */
-export async function GET(_req: Request, { params }: { params: { token: string } }) {
-  const token = (params.token || "").replace(/\.ics$/i, "").trim();
+export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+  // Desde Next 15, los params de una ruta llegan como promesa.
+  const { token: crudo } = await params;
+  // Se admite tanto /api/calendario/<token> como /<token>.ics, que es como lo
+  // pega la gente cuando lo copia del navegador.
+  const token = (crudo || "").replace(/\.ics$/i, "").trim();
 
   // Un token corto sería adivinable a fuerza de probar: se rechaza antes de ir a
   // la base de datos.
@@ -43,7 +47,7 @@ export async function GET(_req: Request, { params }: { params: { token: string }
    * desde la misma red. 120 por hora no molesta a nadie que lo use de verdad.
    */
   await limpiarIntentosViejos();
-  if (await consumir("ia", `calendario:${ipDeLaPeticion()}`, 120, 60)) {
+  if (await consumir("ia", `calendario:${await ipDeLaPeticion()}`, 120, 60)) {
     return new NextResponse("Demasiadas peticiones", {
       status: 429,
       headers: { "Retry-After": "600" },

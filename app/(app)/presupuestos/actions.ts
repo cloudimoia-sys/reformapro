@@ -286,7 +286,7 @@ export async function guardarFirma(presupuestoId: string, dataUrl: string): Prom
   return ejecutar("guardarFirma", async () => {
     const { db } = await requireTenant();
     await cargarEditable(db, presupuestoId);
-    const ip = headers().get("x-forwarded-for")?.split(",")[0]?.trim() || headers().get("x-real-ip") || "";
+    const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || (await headers()).get("x-real-ip") || "";
     await db.presupuesto.updateMany({
       where: { id: presupuestoId },
       data: { firma: dataUrl, fechaFirma: new Date(), firmaIp: ip, estado: "APROBADO" },

@@ -44,7 +44,7 @@ export async function pedirRestablecer(email: string) {
     // Del host real de la petición, NO de NEXTAUTH_URL: esa variable estuvo
     // apuntando a la URL de rama protegida por Vercel y los enlaces de
     // recuperación no llevaban a ninguna parte, sin que nadie lo notara.
-    const base = urlBase();
+    const base = await urlBase();
     const plantilla = emailRestablecer(usuario.nombre, `${base}/restablecer/${token}`);
     try {
       await enviarEmail({ para: usuario.email, ...plantilla });

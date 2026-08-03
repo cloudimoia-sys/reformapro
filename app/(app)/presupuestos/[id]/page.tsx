@@ -2,13 +2,15 @@ import { notFound } from "next/navigation";
 import { requireTenant } from "@/lib/session";
 import PresupuestoEditor from "./PresupuestoEditor";
 
-export default async function PresupuestoDetailPage({ params }: { params: { id: string } }) {
+export default async function PresupuestoDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  // Desde Next 15, los params de una ruta llegan como promesa.
+  const { id } = await params;
   const { user, db } = await requireTenant();
   const [presupuesto, clientes, productos, empresa] = await Promise.all([
     // findFirst y no findUnique: así el id de la URL pasa por el filtro de empresa
     // y pedir el presupuesto de otro cliente devuelve 404 en vez de sus datos.
     db.presupuesto.findFirst({
-      where: { id: params.id },
+      where: { id: id },
       include: { lineas: { orderBy: { orden: "asc" } } },
     }),
     db.cliente.findMany({ orderBy: { nombre: "asc" } }),

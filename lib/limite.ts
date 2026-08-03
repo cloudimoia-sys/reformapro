@@ -37,8 +37,9 @@ export function hashClave(valor: string): string {
  * proxy de Vercel la reescribe la plataforma, y aun en el peor caso el límite
  * global de más abajo sigue en pie.
  */
-export function ipDeLaPeticion(): string {
-  const h = headers();
+export async function ipDeLaPeticion(): Promise<string> {
+  // Desde Next 15, headers() es asincrona.
+  const h = await headers();
   return h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "desconocida";
 }
 

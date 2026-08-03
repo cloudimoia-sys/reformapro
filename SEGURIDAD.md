@@ -1,6 +1,6 @@
 # Seguridad de ReformaPro
 
-Estado a 2 de agosto de 2026. Este documento dice lo que está cubierto **y lo que
+Estado a 3 de agosto de 2026. **Next.js 16 y React 19**, sin avisos de seguridad propios. Este documento dice lo que está cubierto **y lo que
 no**, porque un documento de seguridad que solo cuenta lo bueno no sirve para
 tomar decisiones.
 
@@ -18,6 +18,8 @@ tomar decisiones.
 | Adivinar el feed de calendario | Token aleatorio de 32 bytes, y se rechaza sin tocar la base de datos si es corto |
 | Instrucciones escondidas en el texto del usuario | `comoDato()` en `lib/gemini.ts`, y sobre todo la validación de la salida contra listas cerradas |
 | Que una migración destruya datos | Se escriben a mano, se revisan y solo se aplican con `prisma migrate deploy` desde el despliegue |
+| XSS al exportar un documento | `esc()` en `lib/docExport.ts` y `lib/informeExport.ts`, más el guardián `check-escape.mjs` en cada build |
+| Abuso del feed de calendario | 120 peticiones por hora e IP, la única ruta sin sesión |
 
 Además: las claves de IA solo existen en el servidor, el navegador nunca habla
 con Google directamente; las contraseñas van con bcrypt; los tokens de
@@ -26,22 +28,14 @@ nunca en claro.
 
 ## Lo que NO está resuelto
 
-### 1. Next.js 14.2.35 acumula avisos de seguridad sin parche en su rama
+### 1. `postcss` y `sharp`, arrastrados por Next
 
-`npm audit` lista una veintena de avisos para Next 14. **Ya estamos en la última
-14.2.x que existe**: no hay parche dentro de la rama. El arreglo pasa por saltar
-a Next 16, que es un cambio mayor — en Next 15 `headers()`, `cookies()` y los
-`params` de las páginas pasaron a ser asíncronos, y esta aplicación los usa de
-forma síncrona en varios sitios.
+`npm audit` los marca, y no hay versión que los corrija sin bajar Next a la 9,
+que es absurdo. Ninguno de los dos es alcanzable desde la aplicación desplegada:
+`postcss` solo interviene al construir el CSS, y `sharp` es del optimizador de
+imágenes de `next/image`, que esta aplicación **no usa** en ningún sitio.
 
-Atenuantes reales, sin exagerarlos: buena parte de esos avisos son de denegación
-de servicio o envenenamiento de caché en escenarios de *self-hosting*, con
-`next/image` o con reescrituras, y esta aplicación se sirve desde Vercel, no usa
-el optimizador de imágenes y no tiene reescrituras. Pero no todos aplican solo a
-eso, y quedarse en una versión sin soporte de seguridad no es sostenible.
-
-**Pendiente:** migrar a Next 16 como tarea propia, con su repaso y sus pruebas.
-No es algo que deba colarse dentro de otro cambio.
+Se revisan cuando Next publique una versión con las dependencias al día.
 
 ### 2. `xlsx` (SheetJS) 0.18.5, sin versión corregida en npm
 

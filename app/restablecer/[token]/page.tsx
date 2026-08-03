@@ -2,8 +2,10 @@ import Link from "next/link";
 import { comprobarToken } from "../actions";
 import RestablecerForm from "./RestablecerForm";
 
-export default async function RestablecerPage({ params }: { params: { token: string } }) {
-  const valido = await comprobarToken(params.token);
+export default async function RestablecerPage({ params }: { params: Promise<{ token: string }> }) {
+  // Desde Next 15, los params de una ruta llegan como promesa.
+  const { token } = await params;
+  const valido = await comprobarToken(token);
 
   // Se comprueba antes de pintar el formulario para no hacer escribir una
   // contraseña nueva y rechazarla después.
@@ -29,5 +31,5 @@ export default async function RestablecerPage({ params }: { params: { token: str
     );
   }
 
-  return <RestablecerForm token={params.token} />;
+  return <RestablecerForm token={token} />;
 }

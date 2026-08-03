@@ -3,14 +3,16 @@ import { requireTenant } from "@/lib/session";
 import InformeEditor, { type InformeCompleto } from "./InformeEditor";
 import type { ContenidoInforme } from "@/lib/informe";
 
-export default async function InformePage({ params }: { params: { id: string } }) {
+export default async function InformePage({ params }: { params: Promise<{ id: string }> }) {
+  // Desde Next 15, los params de una ruta llegan como promesa.
+  const { id } = await params;
   const { db } = await requireTenant();
 
   // findFirst, no findUnique: el cliente por empresa solo puede inyectar el
   // filtro en un `where` normal, así que es la vía por la que un informe de otra
   // empresa simplemente no aparece.
   const inf = await db.informe.findFirst({
-    where: { id: params.id },
+    where: { id: id },
     include: { cliente: true, fotos: { orderBy: { orden: "asc" } } },
   });
   if (!inf) notFound();
