@@ -171,7 +171,10 @@ export default function PresupuestoEditor({
     await marcarEnviado(p.id);
     if (p.estado === "BORRADOR") setP((prev) => ({ ...prev, estado: "ENVIADO" }));
     const cuerpo = `Estimado/a ${clienteActual ? clienteActual.nombre : "cliente"}:%0D%0A%0D%0ALe adjuntamos el presupuesto ${p.numero} - ${p.titulo}.%0D%0ATotal: ${eur(d.total)} (IVA incluido).%0D%0A%0D%0APuede aprobarlo firmando en nuestra aplicación o respondiendo a este correo.%0D%0A%0D%0AUn saludo,%0D%0A${empresa.nombre}`;
-    window.open(`mailto:${clienteActual?.email || ""}?subject=Presupuesto ${p.numero} - ${empresa.nombre}&body=${cuerpo}`);
+    // location.href y no window.open: en la aplicación instalada no hay ventana
+    // nueva donde abrir esto, y el botón se quedaba sin hacer nada. Asignar la
+    // dirección deja que el sistema abra el correo y la app se queda donde está.
+    window.location.href = `mailto:${clienteActual?.email || ""}?subject=Presupuesto ${p.numero} - ${empresa.nombre}&body=${cuerpo}`;
   };
 
   const docData = () => ({

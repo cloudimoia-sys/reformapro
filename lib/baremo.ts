@@ -121,6 +121,23 @@ export const BAREMO: PrecioReferencia[] = [
   { concepto: "Cerramiento de fachada de 1/2 pie con aislamiento y trasdosado", unidad: "m²", conMaterial: 92, soloMano: 62 },
   { concepto: "Revoco monocapa o revestimiento exterior con remates y vierteaguas", unidad: "m²", conMaterial: 32, soloMano: 24 },
   { concepto: "Trasdosado autoportante de placa de yeso con aislamiento", unidad: "m²", conMaterial: 42, soloMano: 30 },
+
+  /*
+   * Aislamiento térmico y acústico.
+   *
+   * Hasta ahora solo existía dentro del cerramiento y del trasdosado, así que un
+   * presupuesto de solo aislamiento no tenía de dónde sacar el precio y salía a
+   * ojo. Los tres sistemas están separados porque el precio no se parece: por el
+   * exterior hay que montar andamio, por el interior se pierde superficie útil, y
+   * el insuflado en cámara es el más barato porque no hay obra.
+   */
+  { concepto: "Aislamiento térmico por el exterior (SATE), con andamio y acabado", unidad: "m²", conMaterial: 88, soloMano: 38 },
+  { concepto: "Aislamiento térmico interior con trasdosado de lana mineral", unidad: "m²", conMaterial: 46, soloMano: 26 },
+  { concepto: "Aislamiento insuflado en cámara de aire existente", unidad: "m²", conMaterial: 22, soloMano: 12 },
+  { concepto: "Aislamiento acústico de pared con lana mineral y doble placa", unidad: "m²", conMaterial: 54, soloMano: 30 },
+  { concepto: "Aislamiento acústico de techo con falso techo desolidarizado", unidad: "m²", conMaterial: 62, soloMano: 34 },
+  { concepto: "Aislamiento de suelo flotante con lámina anti-impacto", unidad: "m²", conMaterial: 28, soloMano: 14 },
+  { concepto: "Aislamiento térmico de cubierta por el interior", unidad: "m²", conMaterial: 38, soloMano: 20 },
   // Trabajo estructural. Corregido al alza tras revisar un informe real: la app
   // presupuestaba la sustitución de vigueta a 120 €/ml y un dintel nuevo a 180 €,
   // cuando sustituir una vigueta obliga a apear, demoler el entrevigado a ambos

@@ -2,6 +2,7 @@
 
 import * as XLSX from "xlsx";
 import { eur } from "@/lib/format";
+import { imprimirDocumento } from "@/lib/imprimir";
 import { importeLinea, desglosePres } from "@/lib/presupuesto";
 import {
   AVISO_SIN_VALIDEZ_FISCAL,
@@ -130,11 +131,7 @@ function docHTML(pres: PresupuestoDoc, cliente: ClienteDoc, empresa: EmpresaDoc)
 }
 
 export function exportPDF(pres: PresupuestoDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
-  const w = window.open("", "_blank");
-  if (!w) return;
-  w.document.write(docHTML(pres, cliente, empresa));
-  w.document.close();
-  setTimeout(() => w.print(), 400);
+  imprimirDocumento(docHTML(pres, cliente, empresa));
 }
 
 export function exportWord(pres: PresupuestoDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
@@ -212,11 +209,7 @@ function docHTMLFactura(fac: FacturaDoc, cliente: ClienteDoc, empresa: EmpresaDo
 }
 
 export function exportFacturaPDF(fac: FacturaDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
-  const w = window.open("", "_blank");
-  if (!w) return;
-  w.document.write(docHTMLFactura(fac, cliente, empresa));
-  w.document.close();
-  setTimeout(() => w.print(), 400);
+  imprimirDocumento(docHTMLFactura(fac, cliente, empresa));
 }
 
 export function exportFacturaWord(fac: FacturaDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {

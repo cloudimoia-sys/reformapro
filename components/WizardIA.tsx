@@ -105,6 +105,9 @@ const TIPOS: { grupo: string; opciones: string[] }[] = [
       "Cubierta o tejado",
       "Impermeabilización",
       "Fachada y aislamiento (SATE)",
+      // Faltaba: quien viene a presupuestar solo el aislamiento no encontraba su
+      // trabajo y tenía que elegir "Otra" o el SATE, que es otra cosa y otro precio.
+      "Aislamiento térmico y acústico",
       "Rehabilitación energética",
     ],
   },

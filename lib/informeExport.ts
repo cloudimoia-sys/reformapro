@@ -2,6 +2,7 @@
 
 import * as XLSX from "xlsx";
 import { eur } from "@/lib/format";
+import { imprimirDocumento } from "@/lib/imprimir";
 import {
   importePartida,
   desglosePresupuesto,
@@ -315,11 +316,7 @@ export function exportInformeWord(inf: InformeDoc, cliente: ClienteDoc, empresa:
 }
 
 export function exportInformePDF(inf: InformeDoc, cliente: ClienteDoc, empresa: EmpresaDoc) {
-  const w = window.open("", "_blank");
-  if (!w) return;
-  w.document.write(docHTML(inf, cliente, empresa, false));
-  w.document.close();
-  setTimeout(() => w.print(), 400);
+  imprimirDocumento(docHTML(inf, cliente, empresa, false));
 }
 
 /**

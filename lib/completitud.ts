@@ -24,7 +24,23 @@ export type Obligatoria = {
 
 /** Familias de obra a las que se les exige el listado completo de vivienda. */
 const OBRA_NUEVA = /obra nueva|unifamiliar|ampliaci[oó]n|levante|vivienda de obra/i;
-const REFORMA_INTEGRAL = /reforma integral/i;
+const REFORMA_INTEGRAL = /reforma integral|reforma completa/i;
+
+/**
+ * Palabras que solo aparecen cuando se habla de la vivienda ENTERA.
+ *
+ * "Reforma integral" a secas no basta: "reforma integral de la cocina" es una
+ * cocina de 8 m², y exigirle el listado de una vivienda es absurdo.
+ */
+const VIVIENDA_ENTERA = /\b(vivienda|piso|casa|chalet|adosad\w*|paread\w*|[aá]tico|d[uú]plex|apartamento|unifamiliar)\b/i;
+
+/**
+ * El único tipo del desplegable que no dice de qué obra se trata.
+ *
+ * Con cualquier otro, el tipo manda y el texto libre no se mira. Con este hay
+ * que leer los detalles porque no hay otra cosa.
+ */
+const TIPO_SIN_DEFINIR = /^\s*otra\b|descr[ií]bela/i;
 
 /**
  * Lo que no puede faltar en una vivienda de obra nueva.
@@ -76,17 +92,50 @@ const VIVIENDA_NUEVA: Obligatoria[] = [
   { patron: /control de calidad|ensayo/i, nombre: "Control de calidad", motivo: "obligatorio cuando hay estructura" },
 ];
 
-/** En reforma integral no hay cimentación ni estructura, pero sí instalaciones. */
+/**
+ * En reforma integral no hay cimentación ni estructura, pero sí instalaciones.
+ *
+ * El control de calidad también se cae: su propio motivo dice "obligatorio
+ * cuando hay estructura", y en una reforma no la hay. Reclamarlo era pedir un
+ * ensayo de hormigón a quien solo está cambiando instalaciones y acabados.
+ */
 const REFORMA_COMPLETA: Obligatoria[] = VIVIENDA_NUEVA.filter(
-  (o) => !/geot[eé]cnic|cimentaci|estructura|cubierta|fachada|acabado exterior|urbanizaci|acometida/i.test(o.nombre)
+  (o) =>
+    !/geot[eé]cnic|cimentaci|estructura|cubierta|fachada|acabado exterior|urbanizaci|acometida|control de calidad/i.test(
+      o.nombre
+    )
 );
 
+/**
+ * Qué capítulos son obligatorios en esta obra.
+ *
+ * MANDA EL TIPO, NO EL TEXTO LIBRE. `tipo` sale de un desplegable cerrado del
+ * asistente; `detalles` lo escribe el usuario a su manera.
+ *
+ * Antes se concatenaban los dos y se buscaba "reforma integral" en el resultado.
+ * Un presupuesto de "Cocina completa" cuyos detalles empezaban por "Reforma
+ * integral de la cocina" pasaba a exigir el listado entero de una vivienda: para
+ * 8 m² de cocina reclamaba aislamiento térmico, carpintería exterior, persianas,
+ * puerta de entrada, ACS con aporte renovable, ventilación mecánica y control de
+ * calidad. Once avisos, todos falsos, en el primer presupuesto que alguien probó.
+ *
+ * Y eso es lo peor que puede hacer esta comprobación: un aviso que salta cuando
+ * no toca enseña a ignorarlos todos, incluido el que un día avise de verdad de
+ * que falta la calefacción en una obra nueva.
+ */
 export function listaObligatoria(tipo: string, detalles: string): Obligatoria[] {
-  const texto = `${tipo} ${detalles}`;
-  if (OBRA_NUEVA.test(texto)) return VIVIENDA_NUEVA;
-  if (REFORMA_INTEGRAL.test(texto)) return REFORMA_COMPLETA;
-  // En trabajos concretos (alicatar un aseo, cambiar una ventana) no se exige
-  // nada: reclamar aquí una cocina o una cubierta sería absurdo.
+  if (OBRA_NUEVA.test(tipo)) return VIVIENDA_NUEVA;
+  if (REFORMA_INTEGRAL.test(tipo)) return REFORMA_COMPLETA;
+
+  // Cualquier otro tipo del desplegable es un trabajo concreto —una cocina, un
+  // baño, unos suelos— y no se le exige nada. El texto libre no puede
+  // convertirlo en una vivienda entera.
+  if (!TIPO_SIN_DEFINIR.test(tipo)) return [];
+
+  // Solo cuando el tipo es "Otra (descríbela en los detalles)" hay que leer la
+  // prosa, y ahí "integral" tiene que venir acompañado de la vivienda entera.
+  if (OBRA_NUEVA.test(detalles)) return VIVIENDA_NUEVA;
+  if (REFORMA_INTEGRAL.test(detalles) && VIVIENDA_ENTERA.test(detalles)) return REFORMA_COMPLETA;
   return [];
 }
 

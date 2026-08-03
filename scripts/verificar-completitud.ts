@@ -68,6 +68,51 @@ const falsos = faltan(lista, completo).map((o) => o.nombre);
 if (falsos.length) mal("presupuesto completo", `avisa en falso de: ${falsos.join(", ")}`);
 else bien("un presupuesto completo no produce avisos falsos");
 
+/*
+ * 5) El caso real que rompió esto: una COCINA descrita como "reforma integral".
+ *
+ * El usuario eligió "Cocina completa" en el desplegable, 8 m², y escribió
+ * "Reforma integral de la cocina con puertas y cajones de cierre suave". Como el
+ * tipo y los detalles se concatenaban antes de buscar "reforma integral", le
+ * salieron once avisos exigiéndole el listado entero de una vivienda: puerta de
+ * entrada, persianas, ACS con renovable, ventilación mecánica, control de
+ * calidad. Para una cocina.
+ */
+const COCINA = "Reforma integral de la cocina con puertas y cajones de cierre suave.";
+if (listaObligatoria("Cocina completa", COCINA).length) {
+  mal("cocina", 'decir "reforma integral de la cocina" le exige el listado de una vivienda entera');
+} else bien('una cocina descrita como "reforma integral" sigue siendo una cocina');
+
+// Y lo mismo con el resto de estancias, que es donde más se usa esa expresión.
+for (const [tipo, texto] of [
+  ["Baño completo", "Reforma integral del baño"],
+  ["Suelos y alicatados", "Reforma completa del salón"],
+  ["Pintura y acabados", "Reforma integral del dormitorio principal"],
+] as [string, string][]) {
+  if (listaObligatoria(tipo, texto).length) mal(tipo, `"${texto}" escala a vivienda entera`);
+}
+if (!fallos) bien("baño, salón y dormitorio tampoco escalan a vivienda entera");
+
+// 6) Pero la vivienda entera SÍ tiene que seguir exigiéndolo, por los dos caminos.
+if (listaObligatoria("Reforma integral de vivienda", "Piso de 90 m²").length < 15) {
+  mal("reforma integral", "una reforma integral de vivienda ya no exige capítulos");
+} else bien("una reforma integral de vivienda sigue exigiendo su listado");
+
+// Con "Otra", que es el único tipo que no dice nada, se lee el texto libre.
+if (listaObligatoria("Otra (descríbela en los detalles)", "Reforma integral de un piso de 90 m²").length < 15) {
+  mal("tipo Otra", 'con "Otra" no se lee el texto libre y se pierde la exigencia');
+} else bien('con "Otra", una reforma integral de piso sí exige su listado');
+
+if (listaObligatoria("Otra (descríbela en los detalles)", "Reforma integral de la cocina").length) {
+  mal("tipo Otra", '"reforma integral de la cocina" escala a vivienda entera');
+} else bien('con "Otra", "reforma integral de la cocina" no escala');
+
+// 7) En reforma no hay estructura, así que no se pide un ensayo de hormigón.
+const reforma = listaObligatoria("Reforma integral de vivienda", "");
+if (reforma.some((o) => /control de calidad/i.test(o.nombre))) {
+  mal("control de calidad", "se exige en una reforma, donde no hay estructura que ensayar");
+} else bien("una reforma no exige control de calidad: no hay estructura");
+
 console.log("");
 if (fallos) {
   console.log(`COMPLETITUD INCORRECTA — ${fallos} comprobaciones mal`);
