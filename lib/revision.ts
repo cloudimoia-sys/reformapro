@@ -69,7 +69,43 @@ export function revisarMediciones(lineas: LineaRevisable[], m2Declarados?: numbe
  * y en un documento que se firma es inaceptable. Se detecta cualquier carácter
  * fuera del alfabeto latino y de la puntuación habitual.
  */
-const CARACTERES_RAROS = /[^-ɏ -⁯₠-₿\s]/;
+/*
+ * OJO AL TOCAR ESTA EXPRESION: solo escapes \u, nunca caracteres literales.
+ *
+ * La version anterior escribia los extremos de los rangos con el caracter de
+ * verdad. Al guardarse el fichero se perdio el primero de todos y la clase se
+ * quedo en [^-<letra> ...]: un guion suelto y una letra suelta. Resultado: TODA
+ * letra normal pasaba a ser "rara", y cada informe salia con un aviso por
+ * apartado y otro por partida. Doce avisos falsos seguidos, sobre un documento
+ * que estaba bien.
+ *
+ * Es la segunda vez que un caracter se pierde al escribir este mismo fichero
+ * (la anterior fue un \b que quedo convertido en byte de retroceso). Por eso
+ * aqui no hay ni un caracter fuera de ASCII: ni en la expresion ni en las
+ * cadenas de prueba de abajo.
+ *
+ * Se permite: tabulador y saltos, latino basico y extendido hasta U+024F,
+ * puntuacion general (guiones largos, comillas tipograficas) y simbolos de
+ * moneda. Lo demas -chino, cirilico, emoji- se avisa.
+ */
+const CARACTERES_RAROS = /[^\u0009-\u000D\u0020-\u024F\u2000-\u206F\u20A0-\u20BF]/;
+
+/*
+ * Comprobacion al arrancar, con el mismo patron que la asercion de tenantDb.ts.
+ *
+ * Un fallo ruidoso nada mas arrancar es infinitamente mejor que doce avisos
+ * falsos en cada documento, que es lo que pasaba y nadie ataba con esto.
+ */
+{
+  const normal = "Alicatado de 12 m\u00B2 a 45\u00BA, 1.250 \u20AC \u2014 junta abierta y ni\u00F1os";
+  const chino = "tablones de repart\u8377\u91CD";
+  if ([...normal].some((c) => CARACTERES_RAROS.test(c))) {
+    throw new Error("CARACTERES_RAROS marca como raro un texto espanol normal: la expresion esta corrupta.");
+  }
+  if (![...chino].some((c) => CARACTERES_RAROS.test(c))) {
+    throw new Error("CARACTERES_RAROS ha dejado de detectar caracteres chinos.");
+  }
+}
 
 /**
  * Trabajos que dejan la obra abierta y obligan a reponer algo detrás.
