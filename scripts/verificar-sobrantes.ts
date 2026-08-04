@@ -25,6 +25,7 @@ import {
   acabadoDeParedNoPedido,
   acabadosIncompatibles,
   descripcionesVacias,
+  faltanReposiciones,
   paredesCortas,
   trabajosNoPedidos,
 } from "../lib/revision";
@@ -343,6 +344,58 @@ for (const [concepto, pedido, etiqueta] of [
     bien(`avisa de ${etiqueta} sin pedir`);
   }
 }
+
+/* --------------- Lo que se abre hay que volver a cerrarlo --------------- */
+console.log("\nReposiciones: lo que se pica, se repone");
+
+/*
+ * El caso que lo destapo: una evaluacion energetica cuyo unico trabajo era
+ * sustituir ventanas y poner aerotermia. Saltaba "hay partidas de retirada pero
+ * ninguna de reposicion", y la ventana nueva ERA la reposicion.
+ *
+ * El fallo estaba en como se redactaba la partida. "Ventana de aluminio o PVC
+ * con RPT" es el nombre de un material, no una unidad de obra: una partida dice
+ * que se suministra y que se ejecuta. Ahora lo dice, y de paso el presupuesto
+ * deja de parecer una lista de la compra.
+ */
+const SUSTITUCION = [
+  { concepto: "Desmontaje y retirada de carpinteria exterior existente", descripcion: "Con medios manuales y carga a contenedor" },
+  { concepto: "Ventana de aluminio o PVC con RPT y vidrio 4/16/6 bajo emisivo", descripcion: "Suministro, colocacion y puesta en obra." },
+];
+if (faltanReposiciones(SUSTITUCION).length) {
+  mal("reposiciones", "una sustitucion de ventanas completa salta como si dejara la obra abierta");
+} else bien("sustituir ventanas no salta: la ventana nueva es la reposicion");
+
+// Pero si SOLO se retira y no se pone nada, tiene que seguir saltando.
+const SOLO_RETIRAR = [
+  { concepto: "Desmontaje y retirada de carpinteria exterior existente", descripcion: "Con medios manuales y carga a contenedor" },
+  { concepto: "Gestion de residuos de construccion", descripcion: "Canon de vertedero" },
+];
+if (!faltanReposiciones(SOLO_RETIRAR).length) {
+  mal("reposiciones", "retirar las ventanas y no reponer nada no produce aviso");
+} else bien("retirar y no reponer nada si avisa");
+
+// El caso original que creo la regla: se sanea y se retira, y no se repone nada.
+const BOVEDILLAS = [
+  { concepto: "Saneado de bovedillas danadas", descripcion: "Picado y retirada del material degradado" },
+];
+if (!faltanReposiciones(BOVEDILLAS).length) {
+  mal("reposiciones", "el caso original (saneado sin reposicion) ya no avisa");
+} else bien("el caso original, saneado de bovedillas sin reponer, sigue avisando");
+
+/*
+ * "desmontaje" contiene "montaje".
+ *
+ * Sin limites de palabra, una partida que solo desmonta se daba a si misma por
+ * reposicion. No llegaba a colarse porque la linea se descartaba por otro
+ * camino, pero era una trampa esperando a que alguien tocase la regla.
+ */
+const SOLO_DESMONTAJE = [
+  { concepto: "Desmontaje de radiadores de hierro fundido", descripcion: "Vaciado del circuito y desmontaje" },
+];
+if (!faltanReposiciones(SOLO_DESMONTAJE).length) {
+  mal("reposiciones", '"desmontaje" se cuenta como si fuera "montaje" y da la obra por cerrada');
+} else bien('"desmontaje" no se confunde con "montaje"');
 
 console.log(
   fallos

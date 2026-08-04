@@ -119,7 +119,9 @@ const CARACTERES_RAROS = /[^\u0009-\u000D\u0020-\u024F\u2000-\u206F\u20A0-\u20BF
 const ABREN_OBRA: { patron: RegExp; falta: RegExp; aviso: string }[] = [
   {
     patron: /demolici[oó]n|picado|retirada|saneado|levantado|desmontaje/i,
-    falta: /repos|reconstru|restitu|nuevo|nueva|sustituci|colocaci|montaje/i,
+    // "montaje" va con \b a los dos lados porque si no casa dentro de
+    // "desmontaje", que es justo lo contrario de reponer.
+    falta: /repos|reconstru|restitu|nuevo|nueva|sustituci|colocaci|suministro|instalaci[oó]n de|\bmontaje\b/i,
     aviso:
       "Hay partidas de picado, saneado o retirada pero ninguna de reposición. Lo que se abre hay que volver a cerrarlo: comprueba que no falta reponer lo demolido.",
   },

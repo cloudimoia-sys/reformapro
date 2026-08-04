@@ -344,7 +344,20 @@ Responde SOLO con JSON válido, sin markdown:
         n++;
         partidasFinales.push({
           codigo: `99.${String(n).padStart(2, "0")}`,
-          descripcion: `${m.concepto}. ${m.porQue}`,
+          /*
+           * "Suministro, colocación y puesta en obra" no es relleno.
+           *
+           * Es como se redacta una partida de verdad —lo que se compra y lo que
+           * se ejecuta— y sin eso el presupuesto decía solo el nombre del
+           * material, dejando en el aire si iba montado o puesto en el suelo.
+           *
+           * Además cierra la obra que abren las partidas de desmontaje. Sin esta
+           * frase, un informe cuyo único trabajo era sustituir ventanas saltaba
+           * con "hay partidas de retirada pero ninguna de reposición": la
+           * ventana nueva ERA la reposición, pero no había forma de saberlo
+           * leyendo "Ventana de aluminio o PVC con RPT".
+           */
+          descripcion: `${m.concepto}. Suministro, colocación y puesta en obra. ${m.porQue}`,
           unidad: m.unidad,
           cantidad: m.cantidad,
           precio: ref.conMaterial,
