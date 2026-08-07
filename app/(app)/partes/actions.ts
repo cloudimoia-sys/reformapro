@@ -107,6 +107,9 @@ export type LineaParteInput = {
   cantidad: number;
   unidad: string;
   precio: number;
+  /** Referencia del artículo en el ERP. Se hereda del catálogo, y se puede
+   *  escribir a mano en una línea que no salga de él. */
+  codigoErp?: string | null;
 };
 
 export async function agregarLinea(parteId: string, data: LineaParteInput): Promise<Resultado> {
@@ -152,6 +155,15 @@ export async function agregarMaterialDelCatalogo(parteId: string, productoId: st
         cantidad: 1,
         unidad: producto.unidad,
         precio: producto.precio,
+        // El código de ERP viaja con el material. Es el punto de todo esto: el
+        // consumo sale del parte ya identificado con la referencia que el ERP
+        // entiende, sin que nadie la teclee.
+        //
+        // Se COPIA, no se apunta al producto, por lo mismo que el precio: un
+        // parte registra lo que pasó ese día, y si mañana se corrige la ficha
+        // del catálogo, el parte firmado tiene que seguir diciendo lo que se
+        // puso.
+        codigoErp: producto.codigoErp,
         orden: count,
       },
     });

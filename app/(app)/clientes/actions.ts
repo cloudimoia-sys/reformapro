@@ -14,10 +14,6 @@ export type ClienteInput = {
   poblacion: string;
   provincia: string;
   nif: string;
-  /// Código de este cliente en el ERP externo de la empresa (ExitERP u otro).
-  /// Ver el comentario de ParteTrabajo.codigoErp en el esquema: no hay
-  /// sincronización automática, es para casarlo a mano al exportar.
-  codigoErp: string;
   notas: string;
 };
 

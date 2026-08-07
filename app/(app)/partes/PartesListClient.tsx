@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { eur } from "@/lib/format";
 import { estadoParteClase, estadoParteLabel } from "@/lib/parteTrabajo";
 import { exportExcelPartes } from "@/lib/parteExport";
-import { crearParteBlanco, borrarParte } from "./actions";
+import BotonNuevoParte from "./BotonNuevoParte";
+import { borrarParte } from "./actions";
 
 type Fila = {
   id: string;
@@ -33,22 +34,6 @@ export default function PartesListClient({
   isAdmin: boolean;
 }) {
   const router = useRouter();
-  const [creando, setCreando] = useState(false);
-
-  /**
-   * Sin asistente de IA a propósito. En un presupuesto la IA propone partidas
-   * porque hay algo que estimar; en un parte de trabajo no hay nada que
-   * estimar, solo lo que el técnico ha hecho y el material que ha puesto — y
-   * eso solo lo sabe él. La acción crea el parte en blanco y entra directo al
-   * editor.
-   */
-  const nuevoParte = async () => {
-    setCreando(true);
-    await crearParteBlanco();
-    // crearParteBlanco redirige; si llega aquí es que ha fallado sin lanzar
-    // (no debería, pero se suelta el botón por si acaso).
-    setCreando(false);
-  };
 
   const borrar = async (id: string, numero: string, ev: React.MouseEvent) => {
     ev.stopPropagation();
@@ -67,9 +52,10 @@ export default function PartesListClient({
             Exportar todo a Excel
           </button>
         )}
-        <button className="btn amber" disabled={creando} onClick={nuevoParte}>
-          + Nuevo parte
-        </button>
+        {/* Sin asistente de IA a propósito: en un presupuesto la IA propone
+            partidas porque hay algo que estimar; aquí no hay nada que estimar,
+            solo lo que el técnico ha hecho y el material que ha puesto. */}
+        <BotonNuevoParte />
       </div>
       <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>
         Horas, trabajo hecho y material puesto en cada visita. El material lo rellena el técnico: nadie más sabe lo

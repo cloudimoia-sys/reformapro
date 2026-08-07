@@ -174,11 +174,6 @@ model Cliente {
   poblacion    String        @default("")
   provincia    String        @default("")
   nif          String?
-  /// Código de este cliente en el ERP externo de la empresa (ExitERP u otro),
-  /// para que un parte de trabajo se pueda casar con su ficha allí en vez de
-  /// crear un cliente duplicado al importar. Se rellena a mano hasta que exista
-  /// una integración real: ver el comentario de ParteTrabajo.codigoErp.
-  codigoErp    String?
   notas        String?
   createdAt    DateTime      @default(now())
   presupuestos Presupuesto[]
@@ -229,6 +224,17 @@ model Producto {
   fecha     DateTime   @default(now())
   /// URL de la ficha del producto en la web del proveedor, para el botón "Comprobar precio".
   url       String?
+  /// Código de este artículo en el ERP de la empresa, si tiene uno.
+  ///
+  /// Va AQUÍ y no en el cliente porque un ERP identifica los artículos de forma
+  /// única por código: es el artículo el que tiene referencia, no la persona a
+  /// la que se le factura. Cuando este material entra en un parte de trabajo,
+  /// el código viaja con la línea, y así el consumo de material sale del parte
+  /// ya identificado con la referencia que el ERP entiende.
+  ///
+  /// Opcional siempre: la mayoría de reformistas no tienen ERP, y quien no lo
+  /// tenga no debe verse obligado a rellenar nada.
+  codigoErp String?
 
   @@index([empresaId])
   @@index([provId, empresaId])
@@ -508,18 +514,16 @@ model ParteTrabajo {
   /// Correlativo por empresa: cada empresa tiene su propia serie PT-2026-001.
   numero    String
 
-  /// Código de este parte en el ERP externo (ExitERP u otro), para poder
-  /// casarlo con su ficha allí cuando se traspase.
+  /// Número de ESTE PARTE en el ERP de la empresa, si tiene uno.
   ///
-  /// NO HAY INTEGRACIÓN EN VIVO CON NINGÚN ERP: ExitERP no publica una API con
-  /// la que esta aplicación pueda hablar, y sin sus documentos o su cooperación
-  /// no hay nada real que construir ahí — inventar una integración que no se
-  /// puede probar sería peor que no tener ninguna. Lo que SÍ hay es un puente
-  /// que funciona hoy: este campo se rellena a mano (o se deja vacío y se
-  /// asigna después) y la exportación a Excel lo saca en su propia columna,
-  /// lista para lo que ExitERP sepa importar. Es la misma solución que ya se
-  /// tomó con la facturación: un Excel que cualquiera sabe abrir vale más que
-  /// una integración a medias con un formato que nadie ha podido verificar.
+  /// Es distinto del código de artículo que llevan las líneas: aquel identifica
+  /// un material en el catálogo del ERP, y este identifica el parte entero.
+  /// Los dos son opcionales; quien no tenga ERP no rellena ninguno.
+  ///
+  /// NO HAY INTEGRACIÓN EN VIVO CON NINGÚN ERP, y no por falta de ganas: sin la
+  /// documentación de su API no hay nada real que construir, e inventar un
+  /// conector que no se puede probar es peor que no tener ninguno. Lo que sí
+  /// funciona hoy es el puente por Excel, con estos códigos en sus columnas.
   codigoErp String?
 
   clienteId String?
@@ -585,6 +589,12 @@ model LineaParteTrabajo {
   cantidad    Float
   unidad      String
   precio      Float
+  /// Referencia del artículo en el ERP, COPIADA del catálogo al añadir la línea.
+  ///
+  /// Se copia en vez de apuntar al producto por el mismo motivo que el precio:
+  /// un parte registra lo que pasó ese día. Si mañana se corrige la ficha del
+  /// catálogo, el parte ya firmado tiene que seguir diciendo lo que se puso.
+  codigoErp   String?
   orden       Int    @default(0)
 
   @@index([empresaId])

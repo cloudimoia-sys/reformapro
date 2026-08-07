@@ -51,6 +51,7 @@ export default async function ParteDetailPage({ params }: { params: Promise<{ id
           cantidad: l.cantidad,
           unidad: l.unidad,
           precio: l.precio,
+          codigoErp: l.codigoErp ?? "",
         })),
         fotos: parte.fotos.map((f) => ({ id: f.id, datos: f.datos, pie: f.pie })),
       }}

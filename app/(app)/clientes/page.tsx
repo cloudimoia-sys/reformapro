@@ -18,7 +18,6 @@ export default async function ClientesPage() {
     poblacion: c.poblacion,
     provincia: c.provincia,
     nif: c.nif ?? "",
-    codigoErp: c.codigoErp ?? "",
     notas: c.notas ?? "",
     numPresupuestos: c._count.presupuestos,
   }));

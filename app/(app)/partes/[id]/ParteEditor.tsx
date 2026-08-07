@@ -34,6 +34,7 @@ type Linea = {
   cantidad: number;
   unidad: string;
   precio: number;
+  codigoErp: string;
 };
 type Foto = { id: string; datos: string; pie: string };
 type ParteData = {
@@ -97,9 +98,10 @@ const LINEA_VACIA = (tipo: "MANO_OBRA" | "MATERIAL"): LineaParteInput => ({
   tipo,
   concepto: "",
   descripcion: "",
-  cantidad: tipo === "MANO_OBRA" ? 1 : 1,
+  cantidad: 1,
   unidad: tipo === "MANO_OBRA" ? "h" : "ud",
   precio: 0,
+  codigoErp: null,
 });
 
 export default function ParteEditor({
@@ -261,6 +263,21 @@ export default function ParteEditor({
           onBlur={(e) => { setLineaLocal(l.id, { descripcion: e.target.value }); commitLinea(l.id, { descripcion: e.target.value }); }}
         />
       </td>
+      {/* Solo en material: la mano de obra propia no es un artículo del ERP.
+          Viene relleno si se eligió del catálogo, y se puede escribir a mano
+          en una línea suelta. */}
+      {l.tipo === "MATERIAL" && (
+        <td className="hidemob" style={{ width: 110 }}>
+          <input
+            className="inp"
+            defaultValue={l.codigoErp}
+            disabled={bloqueado}
+            placeholder="—"
+            title="Referencia de este artículo en tu ERP"
+            onBlur={(e) => { setLineaLocal(l.id, { codigoErp: e.target.value }); commitLinea(l.id, { codigoErp: e.target.value }); }}
+          />
+        </td>
+      )}
       <td style={{ width: 80 }}>
         <input
           className="inp"
@@ -374,17 +391,16 @@ export default function ParteEditor({
             <input className="inp" type="time" value={p.horaFin} disabled={bloqueado} onChange={(e) => commit({ horaFin: e.target.value })} />
           </div>
           <div className="field">
-            <label className="lbl">Código en tu ERP (ExitERP u otro)</label>
+            <label className="lbl">Nº de este parte en tu ERP (opcional)</label>
             <input
               className="inp"
               defaultValue={p.codigoErp}
               disabled={bloqueado}
-              placeholder="Opcional — el nº de parte allí, si ya existe"
+              placeholder="Solo si trabajas con un ERP"
               onBlur={(e) => commit({ codigoErp: e.target.value })}
             />
             <p className="hint" style={{ marginTop: 4 }}>
-              No hay sincronización automática con ningún ERP: se rellena a mano. Sirve para que, al exportar a Excel,
-              administración pueda cruzar este parte con el suyo por este código en vez de teclearlo de nuevo.
+              Identifica el parte entero. Las referencias de cada material van en su línea, y salen solas del catálogo.
             </p>
           </div>
         </div>
@@ -436,6 +452,7 @@ export default function ParteEditor({
                 <tr>
                   <th>Concepto</th>
                   <th className="hidemob">Descripción</th>
+                  {tipo === "MATERIAL" && <th className="hidemob">Cód. ERP</th>}
                   <th>{tipo === "MANO_OBRA" ? "Horas" : "Cant."}</th>
                   <th>Ud.</th>
                   <th>Precio</th>

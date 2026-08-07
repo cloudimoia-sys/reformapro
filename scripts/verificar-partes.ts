@@ -8,6 +8,7 @@
  *
  * Ejecutar con: npx tsx scripts/verificar-partes.ts
  */
+import { readFileSync } from "node:fs";
 import { importeLineaParte, totalesParte, estadoParteClase, estadoParteLabel, type LineaParteCalc } from "../lib/parteTrabajo";
 
 let fallos = 0;
@@ -82,6 +83,36 @@ if (estadoParteLabel("FIRMADO") !== "Firmado") mal("etiqueta", "FIRMADO no se le
 if (estadoParteClase("BORRADOR") === estadoParteClase("FIRMADO")) {
   mal("clase", "un parte firmado usa la misma clase visual que uno en borrador");
 } else bien("un parte borrador y uno firmado se distinguen visualmente");
+
+// ───────────────────────── Códigos de ERP ─────────────────────────
+console.log("\nCódigos de ERP");
+
+/*
+ * El código identifica un ARTÍCULO, no un cliente: en un ERP la referencia la
+ * tiene el material, no la persona a la que se le factura. Estuvo un rato en
+ * Cliente por un error de diseño, y esta comprobación existe para que no vuelva.
+ */
+const esquema = readFileSync(new URL("../prisma/schema.prisma", import.meta.url), "utf8");
+const modelo = (nombre: string) => esquema.split(`model ${nombre} {`)[1]?.split("\n}")[0] ?? "";
+
+if (/codigoErp/.test(modelo("Cliente"))) {
+  mal("cliente", "el cliente vuelve a tener codigoErp: la referencia es del artículo, no de quien paga");
+} else bien("el cliente NO tiene código de ERP");
+
+for (const [donde, nombre] of [
+  ["el catálogo", "Producto"],
+  ["la línea del parte", "LineaParteTrabajo"],
+] as [string, string][]) {
+  if (!/codigoErp/.test(modelo(nombre))) mal(nombre, `${donde} no tiene código de ERP y debería`);
+  else bien(`${donde} tiene su código de ERP`);
+}
+
+// Y opcional de verdad: quien no tiene ERP no puede verse obligado a rellenarlo.
+for (const nombre of ["Producto", "LineaParteTrabajo", "ParteTrabajo"]) {
+  const linea = modelo(nombre).split("\n").find((l) => l.trim().startsWith("codigoErp")) ?? "";
+  if (!linea.includes("String?")) mal(nombre, "el código de ERP no es opcional");
+}
+if (!fallos) bien("el código de ERP es opcional en los tres sitios donde aparece");
 
 console.log("");
 if (fallos) {

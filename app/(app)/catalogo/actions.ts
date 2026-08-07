@@ -47,6 +47,8 @@ export type ProductoInput = {
   unidad: string;
   precio: number;
   url: string;
+  /** Referencia de este artículo en el ERP de la empresa, si tiene uno. */
+  codigoErp: string;
 };
 
 /**
@@ -82,6 +84,9 @@ async function prepararProducto(db: ContextoTenant["db"], data: ProductoInput) {
     precio: data.precio,
     // Solo los materiales tienen ficha en la web de un proveedor.
     url: esMaterial ? normalizarUrl(data.url) : null,
+    // Vale para los dos tipos: en un ERP también tienen referencia las unidades
+    // de obra, no solo los materiales que se compran.
+    codigoErp: data.codigoErp?.trim() || null,
     fecha: new Date(),
   };
 }

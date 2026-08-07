@@ -6,7 +6,13 @@ import { imprimirDocumento } from "@/lib/imprimir";
 import { importeLineaParte, totalesParte, ETIQUETA_TIPO_LINEA, type LineaParteCalc } from "@/lib/parteTrabajo";
 import type { ClienteDoc, EmpresaDoc } from "@/lib/docExport";
 
-export type LineaParteDoc = LineaParteCalc & { concepto: string; descripcion: string | null; unidad: string };
+export type LineaParteDoc = LineaParteCalc & {
+  concepto: string;
+  descripcion: string | null;
+  unidad: string;
+  /** Referencia del artículo en el ERP, heredada del catálogo. */
+  codigoErp?: string | null;
+};
 
 export type ParteDoc = {
   numero: string;
@@ -39,13 +45,17 @@ function tablaLineas(lineas: LineaParteDoc[], tipo: "MANO_OBRA" | "MATERIAL") {
   const filas = lineas.filter((l) => l.tipo === tipo);
   if (!filas.length) return "";
   const unidadCol = tipo === "MANO_OBRA" ? "Horas" : "Cantidad";
+  // La columna de referencia solo sale si alguna línea la tiene: a quien no
+  // trabaja con un ERP no se le mete una columna vacía en el documento que
+  // entrega al cliente.
+  const conCodigo = filas.some((l) => l.codigoErp);
   return `
   <h3 style="font-size:14px;color:#1D4E6B;margin:16px 0 4px">${esc(ETIQUETA_TIPO_LINEA[tipo])}</h3>
-  <table><thead><tr><th>Concepto</th><th>Descripción</th><th style="text-align:right">${unidadCol}</th><th style="text-align:right">Ud.</th><th style="text-align:right">Precio</th><th style="text-align:right">Importe</th></tr></thead>
+  <table><thead><tr><th>Concepto</th><th>Descripción</th>${conCodigo ? "<th>Referencia</th>" : ""}<th style="text-align:right">${unidadCol}</th><th style="text-align:right">Ud.</th><th style="text-align:right">Precio</th><th style="text-align:right">Importe</th></tr></thead>
   <tbody>${filas
     .map(
       (l) =>
-        `<tr><td>${esc(l.concepto)}</td><td>${esc(l.descripcion || "")}</td><td style="text-align:right">${esc(l.cantidad)}</td><td style="text-align:right">${esc(l.unidad)}</td><td style="text-align:right">${eur(l.precio)}</td><td style="text-align:right">${eur(importeLineaParte(l))}</td></tr>`
+        `<tr><td>${esc(l.concepto)}</td><td>${esc(l.descripcion || "")}</td>${conCodigo ? `<td>${esc(l.codigoErp || "")}</td>` : ""}<td style="text-align:right">${esc(l.cantidad)}</td><td style="text-align:right">${esc(l.unidad)}</td><td style="text-align:right">${eur(l.precio)}</td><td style="text-align:right">${eur(importeLineaParte(l))}</td></tr>`
     )
     .join("")}</tbody></table>`;
 }
@@ -110,26 +120,31 @@ export function exportParteExcel(p: ParteDoc) {
   const rows = [
     ["Parte de trabajo", p.numero],
     ["Título", p.titulo],
-    ["Código ERP", p.codigoErp || ""],
-    ["Cliente", p.direccion],
+    ["Nº en el ERP", p.codigoErp || ""],
+    ["Dirección", p.direccion],
     ["Fecha", p.fecha],
     ["Técnico", p.tecnico],
     [],
-    ["Tipo", "Concepto", "Descripción", "Cantidad", "Unidad", "Precio", "Importe"],
+    // La referencia del ERP va SIEMPRE en el Excel, aunque esté vacía: este es
+    // el fichero que abre administración para volcar el consumo, y una columna
+    // que aparece y desaparece según el parte rompe cualquier plantilla que
+    // hayan montado encima.
+    ["Tipo", "Concepto", "Descripción", "Ref. ERP", "Cantidad", "Unidad", "Precio", "Importe"],
     ...p.lineas.map((l) => [
       ETIQUETA_TIPO_LINEA[l.tipo],
       l.concepto,
       l.descripcion || "",
+      l.codigoErp || "",
       l.cantidad,
       l.unidad,
       l.precio,
       importeLineaParte(l),
     ]),
     [],
-    ["", "", "", "", "", "Horas", t.horas],
-    ["", "", "", "", "", "Coste mano de obra", t.costeManoObra],
-    ["", "", "", "", "", "Coste material", t.costeMaterial],
-    ["", "", "", "", "", "TOTAL", t.total],
+    ["", "", "", "", "", "", "Horas", t.horas],
+    ["", "", "", "", "", "", "Coste mano de obra", t.costeManoObra],
+    ["", "", "", "", "", "", "Coste material", t.costeMaterial],
+    ["", "", "", "", "", "", "TOTAL", t.total],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -138,14 +153,15 @@ export function exportParteExcel(p: ParteDoc) {
 }
 
 /**
- * Exporta varios partes a una hoja de Excel, con el código ERP en su propia
- * columna.
+ * Exporta varios partes a una hoja de Excel, con el número de ERP en su columna.
  *
- * ES EL PUENTE REAL CON EL ERP, no una integración en vivo — ver el comentario
- * de `ParteTrabajo.codigoErp` en el esquema. Mientras no haya un formato de
- * ExitERP verificado, esto es lo que funciona hoy: un Excel que administración
- * abre, filtra por el código y copia a donde haga falta. Es la misma solución
- * que ya se adoptó para la facturación.
+ * ES EL PUENTE REAL CON EL ERP, no una integración en vivo. Mientras no haya un
+ * formato verificado con el que hablar, esto es lo que funciona hoy: un Excel
+ * que administración abre, filtra por el código y vuelca donde haga falta. Es
+ * la misma solución que ya se adoptó para la facturación.
+ *
+ * El detalle de material con la referencia de cada artículo está en el Excel de
+ * CADA parte (`exportParteExcel`): aquí solo cabe una fila por parte.
  */
 export function exportExcelPartes(
   partes: {
@@ -163,7 +179,7 @@ export function exportExcelPartes(
   nombre: string
 ) {
   const filas: (string | number)[][] = [
-    ["Nº parte", "Código ERP", "Título", "Cliente", "Obra", "Técnico", "Fecha", "Horas", "Total", "Estado"],
+    ["Nº parte", "Nº en el ERP", "Título", "Cliente", "Obra", "Técnico", "Fecha", "Horas", "Total", "Estado"],
     ...partes.map((p) => [
       p.numero,
       p.codigoErp || "",

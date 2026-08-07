@@ -25,6 +25,7 @@ const VACIO: Omit<ProductoInput, "provId" | "tipo"> = {
   unidad: "ud",
   precio: 0,
   url: "",
+  codigoErp: "",
 };
 
 /** Capítulos sugeridos: los mismos que usa la IA, para que todo case. */
@@ -86,6 +87,7 @@ export default function CatalogoClient({
         unidad: p.unidad,
         precio: p.precio,
         url: p.url || "",
+        codigoErp: p.codigoErp || "",
       },
     });
   const cerrar = () => { setModal(null); setError(""); };
@@ -371,6 +373,26 @@ export default function CatalogoClient({
                   onChange={(u) => setModal({ ...modal, data: { ...modal.data, unidad: u } })}
                 />
               </div>
+            </div>
+
+            {/*
+              Vale para materiales y para partidas propias: si la empresa lleva
+              un ERP, ahí tienen referencia las dos cosas. Y es opcional de
+              verdad — la mayoría de reformistas no tiene ERP y no debe verse
+              obligado a rellenar nada para guardar un material.
+            */}
+            <div className="field">
+              <label className="lbl">Código de ERP (opcional)</label>
+              <input
+                className="inp"
+                placeholder="La referencia de este artículo en tu ERP"
+                value={modal.data.codigoErp}
+                onChange={(e) => setModal({ ...modal, data: { ...modal.data, codigoErp: e.target.value } })}
+              />
+              <p className="hint" style={{ marginTop: 4 }}>
+                Solo si trabajas con un ERP. Cuando este artículo entre en un parte de trabajo, el código va con él,
+                y así el consumo de material sale del parte ya identificado con la referencia que tu ERP entiende.
+              </p>
             </div>
 
             {modal.data.tipo === "MATERIAL" && (

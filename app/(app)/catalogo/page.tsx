@@ -20,6 +20,7 @@ export default async function CatalogoPage() {
     precio: p.precio,
     fecha: p.fecha.toISOString().slice(0, 10) || hoy(),
     url: p.url ?? "",
+    codigoErp: p.codigoErp ?? "",
   }));
 
   return <CatalogoClient proveedores={proveedores} productos={data} isAdmin={user.rol === "ADMIN"} />;

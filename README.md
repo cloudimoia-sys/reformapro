@@ -139,26 +139,43 @@ deliberado: nadie más sabe qué material ha entrado en la obra, y una IA
 ofrecerle el catálogo propio de la empresa, para que lo elija con su precio ya
 puesto en vez de teclearlo.
 
-### Por qué NO hay integración automática con ExitERP
+### Los códigos de ERP van en el ARTÍCULO, no en el cliente
 
-Hay un campo `codigoErp` en los partes y en los clientes, y una columna propia
-en la exportación a Excel. Lo que **no** hay es una sincronización en vivo, y no
-es por falta de ganas:
+Un ERP identifica los artículos de forma única por código: la referencia la tiene
+el material, no la persona a la que se le factura. Por eso `codigoErp` vive en
+`Producto` (el catálogo) y **no** en `Cliente` — estuvo un rato ahí por un error
+de diseño y se quitó en la migración `20260807100000`.
 
-- ExitERP no publica una API documentada con la que esta aplicación pueda
-  hablar. Sin sus documentos, sus credenciales de prueba o su cooperación, no
-  hay nada real que construir.
+El flujo es: lo registras una vez en el catálogo → cuando ese artículo entra en
+un parte de trabajo, el código viaja con la línea → el consumo de material sale
+del parte ya identificado con la referencia que el ERP entiende, sin que nadie la
+teclee.
+
+Se **copia** a la línea en vez de apuntar al producto, igual que el precio: un
+parte registra lo que pasó ese día, y si mañana se corrige la ficha del catálogo,
+el parte ya firmado tiene que seguir diciendo lo que se puso.
+
+Hay además un `codigoErp` en la cabecera del parte, que es otra cosa: el número
+del parte entero en el ERP. Los dos son **opcionales** y la interfaz no nombra
+ninguna marca de ERP: la mayoría de reformistas no tiene ninguno y no debe verse
+obligado a rellenar nada.
+
+### Por qué NO hay sincronización automática
+
+- Ningún ERP de este segmento (ExitERP entre ellos) publica una API documentada
+  con la que esta aplicación pueda hablar. Sin sus documentos, sus credenciales
+  de prueba o su cooperación, no hay nada real que construir.
 - Escribir un conector "a ciegas" contra un formato que no se puede probar es
   peor que no tenerlo: parece que funciona hasta el día en que un cliente
   descubre que los datos no cuadran.
 
-Lo que **sí** funciona hoy, que es la misma solución que ya se tomó para
-facturación: el código se anota (a mano, o se deja vacío y se rellena después) y
-la exportación a Excel lo saca en su propia columna. Administración cruza los
-partes por ese código en lugar de teclearlos otra vez.
+Lo que **sí** funciona hoy es la misma solución que ya se tomó para facturación:
+la exportación a Excel saca los códigos en sus columnas y administración vuelca
+el consumo desde ahí, en lugar de teclearlo otra vez.
 
-Si algún día se consigue documentación de ExitERP, el sitio donde engancharla ya
-está preparado: el campo existe, viaja en las exportaciones y tiene índice.
+Si algún día se consigue documentación de un ERP concreto, el sitio donde
+engancharla ya está preparado: los campos existen, viajan en las exportaciones y
+el del catálogo tiene su columna en el Excel de cada parte.
 
 ## Roles
 
