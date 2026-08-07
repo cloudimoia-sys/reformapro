@@ -27,6 +27,7 @@ import {
   descripcionesVacias,
   faltanReposiciones,
   paredesCortas,
+  quitarTrabajoNoPedido,
   trabajosNoPedidos,
 } from "../lib/revision";
 
@@ -396,6 +397,102 @@ const SOLO_DESMONTAJE = [
 if (!faltanReposiciones(SOLO_DESMONTAJE).length) {
   mal("reposiciones", '"desmontaje" se cuenta como si fuera "montaje" y da la obra por cerrada');
 } else bien('"desmontaje" no se confunde con "montaje"');
+
+/* ─────────── Fontanería y electricidad se QUITAN, no se avisan ─────────── */
+console.log("\nFontanería y electricidad, cuando no se piden, se quitan del presupuesto");
+
+/*
+ * CASO REAL. "Reforma completa de la cocina, cambiando suelos, paredes,
+ * mobiliario y electrodomésticos [...] cambio de puerta y ventana" — sin
+ * nombrar fontanería ni electricidad en ningún sitio — generó de todos modos
+ * una renovación de fontanería y una instalación eléctrica completas. El
+ * aviso las señalaba, pero se quedaban en el documento hasta que alguien se
+ * acordara de borrarlas: "hay que acordarse" es justo por donde esto se cuela.
+ */
+const PEDIDO_COCINA =
+  "Reforma completa de la cocina, cambiando suelos, paredes, mobiliario y electrodomésticos. " +
+  "También se incluye el cambio de puerta y ventana de la estancia.";
+const conFontaneriaYElectricidad = [
+  l("Renovación de la red de fontanería", "", 1, "pa"),
+  l("Instalación eléctrica completa", "", 1, "pa"),
+  l("Mobiliario de cocina a medida", "", 6, "ml"),
+];
+const { lineas: sinNoPedido, quitadas } = quitarTrabajoNoPedido(PEDIDO_COCINA, conFontaneriaYElectricidad);
+
+if (quitadas.length !== 2) {
+  mal("cocina sin fontanería ni electricidad", `debía quitar 2 líneas y quitó ${quitadas.length}`);
+} else bien("quita la fontanería y la electricidad que nadie pidió");
+
+if (sinNoPedido.length !== 1 || sinNoPedido[0].concepto !== "Mobiliario de cocina a medida") {
+  mal("cocina sin fontanería ni electricidad", "no debía tocar el mobiliario, que sí encaja en una reforma completa");
+} else bien("no toca el mobiliario de cocina: una reforma completa sí lo incluye sin nombrarlo");
+
+// Con las líneas ya fuera, el aviso de "trabajo no pedido" no tiene nada de
+// qué avisar: quitar y luego seguir avisando sería redundante y confuso.
+if (trabajosNoPedidos(PEDIDO_COCINA, sinNoPedido).length) {
+  mal("tras quitar", "sigue avisando de fontanería/electricidad después de haberlas quitado");
+} else bien("una vez quitadas, no queda ningún aviso pendiente sobre ellas");
+
+// Pero si SÍ se piden, ni una reforma completa hace que se quiten por error.
+const PEDIDO_CON_FONTANERIA = "Reforma integral de vivienda, incluida renovación de fontanería y electricidad.";
+const { quitadas: noDebeQuitar } = quitarTrabajoNoPedido(PEDIDO_CON_FONTANERIA, conFontaneriaYElectricidad);
+if (noDebeQuitar.length) {
+  mal("fontanería sí pedida", "las quita aunque el usuario las haya pedido con todas las letras");
+} else bien("si de verdad se piden, no se tocan");
+
+/* ─────────────── "Pintar el techo" no es pintar la pared ─────────────── */
+console.log("\n\"Pintar el techo\" no cuenta como pintura pedida para la pared");
+
+/*
+ * CASO REAL: "7- Renovación completa de la cerámica de las paredes." y,
+ * aparte, "8- Pintar el techo del baño." Salían dos avisos falsos
+ * encadenados: que el alicatado —pedido con todas las letras, solo que como
+ * "cerámica" y no como "alicatar"— "no se había pedido", y que la pintura del
+ * techo (2,7 m², justo el tamaño del techo) medía poco para ser una pared.
+ */
+const PEDIDO_CERAMICA_Y_TECHO = `6- Colocar nuevo suelo cerámico sobre el suelo existente.
+7- Renovación completa de la cerámica de las paredes.
+8- Pintar el techo del baño.`;
+const banoReal = [
+  l("Solado de gres porcelánico", "", 2.7, "m²"),
+  l("Alicatado de paredes con azulejo o porcelánico", "", 16, "m²"),
+  l("Pintura plástica lisa en paramentos", "", 2.7, "m²"),
+];
+
+if (acabadoDeParedNoPedido(PEDIDO_CERAMICA_Y_TECHO, banoReal).length) {
+  mal("cerámica de paredes + techo", "avisa del alicatado o de la pintura, y los dos son correctos");
+} else bien('"renovación de la cerámica de las paredes" se reconoce como alicatado pedido');
+
+if (paredesCortas(banoReal, PEDIDO_CERAMICA_Y_TECHO).length) {
+  mal("cerámica de paredes + techo", "la pintura del techo (2,7 m²) se compara con la superficie de una pared");
+} else bien("la pintura del techo no se mide contra la superficie de la pared: nunca se pidió para la pared");
+
+// Pero si de verdad se pide pintar la pared y solo se mide el techo por error,
+// el aviso original (el que dio origen a esta función) tiene que seguir en pie.
+const PARED_PEDIDA_TECHO_MEDIDO = "Pintar las paredes del baño.";
+const soloTechoMedido = [l("Solado de gres porcelánico", "", 7.1, "m²"), l("Pintura plástica lisa en paramentos", "", 8, "m²")];
+if (!paredesCortas(soloTechoMedido, PARED_PEDIDA_TECHO_MEDIDO).length) {
+  mal("pared pedida, techo medido", "ya no detecta el caso original: pared pedida y solo el techo medido por error");
+} else bien("si de verdad se pidió la pared y solo se midió el techo, el aviso original sigue saltando");
+
+// Y si se piden las dos cosas en la misma frase, ninguna se pierde.
+const TECHO_Y_PARED = "Pintar el techo y las paredes del baño.";
+if (!paredesCortas(soloTechoMedido, TECHO_Y_PARED).length) {
+  mal("techo y pared juntos", "pedir las dos cosas a la vez hace que se pierda el aviso de la pared");
+} else bien('"pintar el techo Y las paredes" no pierde el aviso: la pared también se pidió');
+
+// El caso que dio origen a la regla —un alicatado sobrante de verdad— sigue
+// saltando: la pintura nunca debe tapar un extra que sí lo es.
+const PEDIDO_PANEL_Y_PINTURA = "Alicatar los suelos, pintar las paredes y panelar la ducha.";
+const conAlicatadoSobrante = [
+  l("Solado de gres porcelánico", "", 4, "m²"),
+  l("Pintura plástica lisa en paramentos", "", 12, "m²"),
+  l("Panel decorativo de ducha", "", 4, "m²"),
+  l("Alicatado de paredes con azulejo o porcelánico", "", 12, "m²"),
+];
+if (!acabadoDeParedNoPedido(PEDIDO_PANEL_Y_PINTURA, conAlicatadoSobrante).length) {
+  mal("alicatado sobrante real", "deja de avisar del caso que dio origen a esta función");
+} else bien("un alicatado sobrante de verdad (no pedido, compite con panel y pintura) sigue avisando");
 
 console.log(
   fallos

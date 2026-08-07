@@ -225,18 +225,23 @@ export function textoSospechoso(textos: { donde: string; texto: string }[]): str
  * la toma existente. Solo se renueva la red si el cliente lo pide o si al abrir
  * aparece que la instalación no vale — y eso se decide en obra, no al presupuestar.
  */
-const TRABAJO_CARO: { patron: RegExp; loPide: RegExp; aviso: string }[] = [
+const TRABAJO_CARO: { patron: RegExp; loPide: RegExp; aviso: string; seQuitaSolo?: boolean }[] = [
   {
     patron: /renovaci[oó]n de (la )?red|instalaci[oó]n (completa )?de fontaner|nueva red de fontaner|rozas? (para|de) fontaner/i,
     loPide: /fontaner|tuber|ca[ñn]er|instalaci[oó]n de agua|renovar (la )?red|rozas?|saneamiento|bajante|desag[üu]e/i,
     aviso:
       'Has presupuestado renovar la fontanería y no se pedía: cambiar los aparatos es sustituir la pieza sobre la toma que ya está. Quítalo, o justifica en la descripción por qué hace falta.',
+    // Ni con "reforma completa" ni con "obra nueva" se sobreentiende: por eso,
+    // a diferencia de las ventanas o el mobiliario de abajo, esta no lleva
+    // "reforma integral" en su loPide. Ver seQuitaSolo más abajo.
+    seQuitaSolo: true,
   },
   {
     patron: /instalaci[oó]n el[eé]ctrica|cuadro el[eé]ctrico|nueva red el[eé]ctrica|rozas? (para|de) electricidad/i,
     loPide: /el[eé]ctric|cableado|enchufe|cuadro|punto de luz|iluminaci|rozas?/i,
     aviso:
       "Has presupuestado obra eléctrica y no se pedía. Quítalo, o explica en la descripción por qué es necesaria.",
+    seQuitaSolo: true,
   },
   {
     patron: /demolici[oó]n de tabique|apertura de hueco|derribo de tabiqu/i,
@@ -304,6 +309,46 @@ export function trabajosNoPedidos(
 }
 
 /**
+ * Quita del presupuesto el trabajo que NUNCA se da por incluido, en vez de
+ * solo avisar de él.
+ *
+ * Caso real: "Reforma completa de la cocina, cambiando suelos, paredes,
+ * mobiliario y electrodomésticos [...] cambio de puerta y ventana" — sin
+ * nombrar fontanería ni electricidad en ningún sitio — generó de todos modos
+ * una renovación de fontanería y una instalación eléctrica completas. El
+ * aviso las señalaba bien, pero se quedaban en el documento hasta que alguien
+ * se acordara de borrarlas a mano, y "acordarse de borrarlo" es la costura por
+ * la que esto se cuela: un presupuesto con dos partidas de más que nadie pidió
+ * sale igual de mal si el aviso estaba ahí y no se leyó.
+ *
+ * SOLO fontanería y electricidad, y no el resto de `TRABAJO_CARO` (ventanas,
+ * armarios, calefacción, mobiliario): esas otras sí se dan por incluidas en
+ * una reforma integral de verdad —su `loPide` ya lo dice expresamente—, así
+ * que quitarlas automáticamente estropearía un presupuesto de obra completa
+ * que las necesita sin haberlas nombrado una a una. Fontanería y electricidad
+ * son las dos únicas que ni una reforma integral desbloquea: por eso, y solo
+ * para ellas, "no pedido" significa que no se hace, no que se avise y ya está.
+ */
+export function quitarTrabajoNoPedido<T extends { concepto: string; descripcion: string }>(
+  descripcion: string,
+  lineas: T[]
+): { lineas: T[]; quitadas: string[] } {
+  const pedido = descripcion || "";
+  const reglas = TRABAJO_CARO.filter((t) => t.seQuitaSolo && !t.loPide.test(pedido));
+  if (!reglas.length) return { lineas, quitadas: [] };
+
+  const quitadas: string[] = [];
+  const restantes = lineas.filter((l) => {
+    const texto = `${l.concepto} ${l.descripcion}`;
+    const regla = reglas.find((r) => r.patron.test(texto));
+    if (!regla) return true;
+    quitadas.push(l.concepto);
+    return false;
+  });
+  return { lineas: restantes, quitadas };
+}
+
+/**
  * Una línea que DESTRUYE no cuenta como acabado ni como medición de referencia.
  *
  * Es la misma lección que ya costó un falso negativo en `faltanReposiciones`:
@@ -321,9 +366,21 @@ const ACABADOS_PARED = [
   {
     nombre: "alicatado",
     patron: /alicatad/i,
-    // Cómo lo pediría el usuario. "Alicatar suelos" NO cuenta: es solar, y así lo
-    // llama medio país.
-    loPide: /alicat\w*\s+(de\s+|las\s+|la\s+)*pared|azulejo\w*\s+(en|de)\s+(las\s+)?pared|alicatar\s+el\s+ba[ñn]o\s+(entero|completo)/i,
+    /**
+     * Cómo lo pediría el usuario. "Alicatar suelos" NO cuenta: es solar, y así
+     * lo llama medio país.
+     *
+     * "cer[aá]mic\w*" y el artículo antes de "pared" son los dos añadidos tras
+     * un caso real: el encargo decía "Renovación completa de la cerámica de
+     * las paredes", y ni "cerámica" aparecía en el patrón ni "azulejo\\w*"
+     * casaba con "azulejADO" —son palabras que arrancan igual pero divergen
+     * justo en la letra siguiente ("azulej-O" contra "azulej-ADO"), así que
+     * \\w* nunca llegaba a "azulejado" porque el patrón exigía la "o" primero.
+     * Sin reconocer que SÍ se había pedido, el aviso decía "no se pidió" sobre
+     * un alicatado que el cliente había encargado con todas las letras.
+     */
+    loPide:
+      /alicat\w*\s+(de\s+|las\s+|la\s+)*pared|azulej\w*\s+(en|de)\s+(la\s+|las\s+)*pared|cer[aá]mic\w*\s+(de\s+|las\s+|la\s+)*pared|alicatar\s+el\s+ba[ñn]o\s+(entero|completo)/i,
   },
   {
     nombre: "panel decorativo",
@@ -336,6 +393,33 @@ const ACABADOS_PARED = [
   // las demás: en un baño es normal alicatar abajo y pintar arriba.
   { nombre: "pintura", patron: /pintura|pintad/i, loPide: /pintar|pintura/i },
 ];
+
+/**
+ * "Pintar el techo" no es pedir pintura para la PARED.
+ *
+ * Caso real: el encargo pedía "Renovación completa de la cerámica de las
+ * paredes" (alicatado) y, en un punto aparte, "Pintar el techo del baño". El
+ * "loPide" de pintura es a propósito laxo —/pintar|pintura/i, sin exigir la
+ * palabra "pared"— porque "pintar el baño" a secas normalmente SÍ significa
+ * las paredes. Ese mismo criterio, sin distinguir superficie, hacía que
+ * "pintar el techo" contara como "pintura pedida para la pared", y de ahí
+ * salían dos avisos falsos encadenados: que el alicatado —que sí se había
+ * pedido— "no se pidió, para la pared se pidió pintura", y que esa misma
+ * pintura (que medía justo el techo, 2,7 m²) se quedaba corta para ser una
+ * pared de 16 m².
+ *
+ * Se quita la frase del texto ANTES de comprobar qué se pidió para la pared,
+ * en vez de intentar que un único patrón distinga las dos superficies a la
+ * vez. Con negación por delante y por detrás para no tragarse una frase que sí
+ * hable de pared: "pintar el techo y las paredes" no se toca, porque "pared"
+ * aparece a menos de 25 caracteres de "techo" a cualquiera de los dos lados.
+ */
+const PINTURA_SOLO_TECHO =
+  /pint(?:ar|ura)(?![^.;\n]{0,40}(?:pared|paramento))[^.;\n]{0,25}\btechos?\b(?![^.;\n]{0,25}(?:pared|paramento))/gi;
+
+function sinPinturaDeTecho(texto: string) {
+  return texto.replace(PINTURA_SOLO_TECHO, " ");
+}
 
 /** Los que se disputan el paramento. La pintura convive con todos. */
 const COMPITEN = new Set(["alicatado", "panel decorativo", "papel pintado", "microcemento"]);
@@ -414,7 +498,11 @@ export function acabadoDeParedNoPedido(
   pedido: string,
   lineas: { concepto: string; descripcion: string; cantidad: number; unidad: string }[]
 ): string[] {
-  const texto = pedido || "";
+  // "Pintar el techo" no cuenta como pintura pedida PARA LA PARED: ver el
+  // comentario de PINTURA_SOLO_TECHO. Sin esto, pedir alicatar la pared y
+  // pintar (solo) el techo hacía creer que "la pared" ya tenía pintura
+  // asignada, y el alicatado que sí se había pedido salía como sobrante.
+  const texto = sinPinturaDeTecho(pedido || "");
   // Sin saber qué se pidió para la pared, esto no puede juzgar nada.
   const algunoPedido = ACABADOS_PARED.some((a) => a.loPide.test(texto));
   if (!algunoPedido) return [];
@@ -426,6 +514,17 @@ export function acabadoDeParedNoPedido(
     if (esZonaConcreta(l)) continue; // un panel para la ducha no reviste la pared
     const acabado = acabadoDePared(l);
     if (!acabado || vistos.has(acabado.nombre)) continue;
+    /**
+     * La pintura nunca se señala como el "acabado sobrante", por el mismo
+     * motivo que en acabadosIncompatibles: convive con las demás, y a
+     * diferencia de un alicatado o un panel, una línea de pintura puede ser
+     * perfectamente el techo y no la pared —el concepto no distingue
+     * superficie, solo el material—. Marcarla como extra confundía este
+     * caso con el de un alicatado pedido de verdad: tras reconocer que sí se
+     * había pedido el alicatado, la pintura del techo pasaba a leerse como
+     * "el acabado que sobra", que es el mismo error con el nombre cambiado.
+     */
+    if (!COMPITEN.has(acabado.nombre)) continue;
     if (acabado.loPide.test(texto)) continue; // sí se pidió
     vistos.add(acabado.nombre);
     avisos.push(
@@ -492,13 +591,20 @@ export function paredesCortas(
   const esperado = paredEsperada(lineas);
   if (!esperado) return [];
 
+  // Igual que en acabadoDeParedNoPedido: "pintar el techo" no es un encargo de
+  // pintura PARA LA PARED, así que no puede usarse para exigirle a esa línea
+  // la superficie de una pared. El caso que sí debe seguir saltando —pared
+  // pedida y solo el techo medido por error— no tiene "techo" en el encargo
+  // del usuario, solo en la partida generada, así que no lo toca esta limpieza.
+  const textoSinTecho = sinPinturaDeTecho(pedido || "");
+
   return lineas
     .filter((l) => {
       if (!/^m2|^m²/i.test((l.unidad || "").trim())) return false;
       if (esZonaConcreta(l)) return false;
       const a = acabadoDePared(l);
       // Solo lo que el usuario mandó poner en la pared.
-      return !!a && a.loPide.test(pedido || "") && l.cantidad < esperado * 0.6;
+      return !!a && a.loPide.test(textoSinTecho) && l.cantidad < esperado * 0.6;
     })
     .map(
       (l) =>

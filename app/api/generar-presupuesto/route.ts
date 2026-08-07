@@ -9,6 +9,7 @@ import {
   acabadoDeParedNoPedido,
   faltanElementosPedidos,
   trabajosNoPedidos,
+  quitarTrabajoNoPedido,
   acabadosIncompatibles,
   paredesCortas,
   descripcionesVacias,
@@ -261,15 +262,30 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
       }))
     );
 
+    /**
+     * Fontanería y electricidad se QUITAN, no se avisan, cuando no se han
+     * pedido. Van ANTES de calcular indirectos a propósito: si se quitaran
+     * después, seguridad y salud y gestión de residuos seguirían calculándose
+     * como porcentaje de un trabajo que ya no está en el presupuesto.
+     */
+    const pedido = `${f.detalles || ""} ${f.estancias || ""}`;
+    const { lineas: sinNoPedido, quitadas } = quitarTrabajoNoPedido(pedido, conCatalogo);
+
     // Los indirectos (seguridad y salud, residuos, control de calidad) se calculan
     // como porcentaje de la obra en vez de estimarse. Es lo que hace que el mismo
     // trabajo cueste lo mismo en dos generaciones distintas.
-    const { lineas: finales } = normalizarIndirectos(conCatalogo);
+    const { lineas: finales } = normalizarIndirectos(sinNoPedido);
 
     // Red de seguridad: las reglas del prompt reducen los disparates de medicion,
     // pero no los eliminan. Lo dudoso se le senala al usuario en vez de corregirlo
     // a su espalda, porque una medicion es decision suya.
     const avisos = revisarMediciones(finales, Number(f.m2) || undefined);
+
+    if (quitadas.length) {
+      avisos.push(
+        `Se ha quitado del presupuesto, porque no se pedía: ${quitadas.join(", ")}. Si de verdad hace falta, vuelve a añadirlo y explica en la descripción por qué.`
+      );
+    }
 
     // Lo que falta se avisa aunque la IA haya seguido la lista: es la unica forma
     // de que un olvido de 40.000 EUR no se descubra con la obra empezada.
@@ -281,7 +297,7 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
     // caro: un horno o una campana que nadie presupuesto pero el cliente espera.
     avisos.push(
       ...faltanElementosPedidos(
-        `${f.detalles || ""} ${f.estancias || ""}`,
+        pedido,
         finales.map((l: any) => ({ concepto: l.concepto, descripcion: l.descripcion }))
       )
     );
@@ -294,7 +310,6 @@ Hasta 40 partidas, ordenadas por capítulo en el orden lógico de ejecución. Us
      * renovacion de fontaneria de 480 EUR que nadie habia pedido, el panel medido
      * a menos de la mitad de la pared, y el inodoro sin descripcion.
      */
-    const pedido = `${f.detalles || ""} ${f.estancias || ""}`;
     const paraRevisar = finales.map((l: any) => ({
       concepto: l.concepto,
       descripcion: l.descripcion,
