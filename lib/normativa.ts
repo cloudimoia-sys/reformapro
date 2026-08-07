@@ -205,6 +205,33 @@ export const NORMATIVA: EntradaNormativa[] = [
       "Son secciones mínimas para tiradas normales de vivienda: en recorridos largos hay que comprobar la caída de tensión, que puede obligar a subir de sección.",
   },
   {
+    id: "rebt-colores-conductores",
+    tipo: "normativa",
+    claves: [
+      "color", "cableado", "cable", "conductor", "hilo", "fase", "neutro",
+      "tierra", "proteccion", "marron", "azul", "identificacion",
+    ],
+    tema: "Colores de identificación de los conductores",
+    respuesta:
+      "Neutro: azul claro. Conductor de protección (tierra): bicolor amarillo-verde, que no se puede usar para ninguna otra función. Fases: marrón, negro y gris. En monofásico de vivienda lo habitual es fase marrón, neutro azul y tierra amarillo-verde.",
+    fuente:
+      "REBT ITC-BT-19 (Instalaciones interiores o receptoras. Prescripciones generales), identificación de conductores, en concordancia con la norma UNE-EN 60445",
+    matiz:
+      "El amarillo-verde está reservado en exclusiva a la protección: usarlo de fase o de neutro es una de las cosas que un inspector no deja pasar. En instalaciones viejas te encontrarás el neutro en gris o negro, y eso hay que corregirlo al renovar.",
+  },
+  {
+    id: "rebt-cuadro-altura",
+    tipo: "normativa",
+    claves: [
+      "cuadro", "altura", "icp", "diferencial", "magnetotermico", "proteccion",
+      "mando", "electricidad", "general",
+    ],
+    tema: "Altura del cuadro general de mando y protección",
+    respuesta:
+      "Los dispositivos generales de mando y protección se sitúan entre 1,40 m y 2,00 m del suelo en viviendas. En locales comerciales e industriales la altura mínima sube a 1,00 m.",
+    fuente: "REBT ITC-BT-17 (Dispositivos generales e individuales de mando y protección)",
+  },
+  {
     id: "rebt-bano-volumenes",
     tipo: "normativa",
     claves: ["bano", "volumen", "electricidad", "ducha", "banera", "enchufe", "seguridad", "rebt"],
@@ -218,7 +245,14 @@ export const NORMATIVA: EntradaNormativa[] = [
   {
     id: "he-transmitancia",
     tipo: "normativa",
-    claves: ["aislamiento", "transmitancia", "espesor", "he1", "termico", "fachada", "cubierta"],
+    // Ojo al ampliar esta lista: "distancia" y "minima" estuvieron aquí un rato
+    // y hacían que "¿qué distancia mínima hay entre pilares?" cayera en la
+    // transmitancia térmica. Las claves genéricas arrastran preguntas de otro
+    // oficio; van claves del CERRAMIENTO, que es de lo que trata la entrada.
+    claves: [
+      "aislamiento", "transmitancia", "espesor", "he1", "termico", "fachada",
+      "cubierta", "muro", "camara", "cerramiento", "hoja", "exterior", "interior",
+    ],
     tema: "Transmitancia térmica límite de la envolvente",
     respuesta:
       "El DB-HE 1 no fija un espesor de aislante: fija la transmitancia (U, en W/m²K) que no se puede superar, y varía según la zona climática del municipio y el elemento (fachada, cubierta, suelo, hueco). El espesor sale de calcular con la conductividad del material que se vaya a poner.",
@@ -387,6 +421,22 @@ export const NORMATIVA: EntradaNormativa[] = [
     fuente: "Medidas de serie habituales de la carpintería de interior española",
     matiz:
       "Si la puerta tiene que servir a un itinerario accesible, la hoja de 72,5 cm se queda corta: hacen falta 80 cm LIBRES de paso, y eso obliga a hoja de 82,5 cm o más.",
+  },
+
+  // ---- Cerramientos ----
+  {
+    id: "practica-fachada-doble-hoja",
+    tipo: "practica",
+    claves: [
+      "fachada", "muro", "camara", "cerramiento", "hoja", "distancia", "separacion",
+      "exterior", "interior", "aire", "tabique", "aislamiento", "espesor", "ladrillo",
+    ],
+    tema: "Composición habitual de una fachada de doble hoja con cámara",
+    respuesta:
+      "Lo corriente en vivienda española: hoja exterior de ½ pie de ladrillo perforado (11,5 cm), cámara de 3-5 cm, aislamiento de 4-8 cm y hoja interior de tabique de 7-9 cm o placa de yeso laminado sobre estructura. El cerramiento acabado suele quedar entre 25 y 30 cm. En construcción actual el aislante ocupa casi toda la cámara y quedan 1-2 cm de aire, o se rellena entera.",
+    fuente: "Composición habitual de la fachada de doble hoja en vivienda española",
+    matiz:
+      "NO hay una distancia mínima entre hojas que fije ninguna norma. El espesor sale del CÁLCULO: la transmitancia que exige el DB-HE según zona climática y el aislamiento acústico del DB-HR. Con lana mineral y con XPS, para la misma exigencia, salen espesores distintos. Cualquiera que te dé un número de cámara «según el CTE» te lo está inventando.",
   },
 
   // ---- Pendientes de ejecución ----

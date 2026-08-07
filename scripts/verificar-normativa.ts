@@ -74,6 +74,49 @@ ok(
   "y además la parte que SÍ es normativa: que tienen que existir y quedar accesibles"
 );
 
+/* ─────────────── Huecos detectados usando el copiloto de verdad ─────────────── */
+
+bloque("Preguntas corrientes que se quedaban sin respuesta");
+
+const colores = buscarNormativa("¿De qué color va cada cable en una vivienda?");
+ok(
+  colores.some((e) => e.id === "rebt-colores-conductores"),
+  "«de qué color va cada cable» encuentra la identificación de conductores"
+);
+ok(
+  buscarNormativa("colores del cableado eléctrico").some(
+    (e) => e.id === "rebt-colores-conductores"
+  ),
+  "«colores del cableado» también la encuentra"
+);
+
+/*
+ * Esta pregunta es el mejor ejemplo de por qué el copiloto no puede limitarse
+ * a "buscar el dato": NO EXISTE una distancia mínima entre hojas en ninguna
+ * norma. Sale del cálculo térmico y acústico. La respuesta correcta no es un
+ * número, es explicar que quien te dé un número «según el CTE» se lo inventa.
+ */
+const muro = buscarNormativa("Distancia mínima entre el muro interior y el exterior.");
+ok(muro.length > 0, "«distancia mínima entre muro interior y exterior» ya no se queda muda");
+ok(
+  muro.some((e) => e.id === "practica-fachada-doble-hoja"),
+  "y da la composición habitual de fachada de doble hoja"
+);
+ok(
+  muro.some((e) => e.id === "he-transmitancia"),
+  "junto con la entrada que explica que el espesor sale del cálculo, no de una tabla"
+);
+
+const fachada = NORMATIVA.find((e) => e.id === "practica-fachada-doble-hoja")!;
+ok(
+  /no hay una distancia m[ií]nima/i.test(fachada.matiz || ""),
+  "la propia entrada avisa de que ninguna norma fija esa distancia"
+);
+ok(
+  fachada.tipo === "practica",
+  "y va como práctica, porque la composición es costumbre y no exigencia"
+);
+
 /* ─────────────── El fallo de subcadena que ensuciaba las respuestas ─────────────── */
 
 bloque("Buscar por raíz de palabra, no por trozo de palabra");
