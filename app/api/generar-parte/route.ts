@@ -3,7 +3,7 @@ import { requireTenant } from "@/lib/session";
 import { limiteIaSuperado, ERROR_LIMITE_IA } from "@/lib/limite";
 import { llamarAGemini, respuestaDeError, leerJson, extraerLista, comoDato, type Parte } from "@/lib/gemini";
 import { aplicarCatalogo, type PartidaCatalogo } from "@/lib/coincidencia";
-import { lineasSinCantidad, type LineaGeneradaParte } from "@/lib/parteTrabajo";
+import { lineasSinCantidad, lineasSinCatalogo, type LineaGeneradaParte } from "@/lib/parteTrabajo";
 
 export const maxDuration = 60;
 
@@ -11,20 +11,24 @@ export const maxDuration = 60;
  * Estructura por IA lo que el técnico ha dictado tras una visita, en líneas de
  * mano de obra y de material.
  *
- * NO ES UN ASISTENTE QUE ESTIME, es un asistente que ORDENA. La diferencia
- * importa: un presupuesto es una previsión de lo que hará falta, así que tiene
- * sentido que la IA proponga cantidades razonables sobre las que el usuario
- * corrige. Un parte de trabajo es el registro de lo que YA HA PASADO, y es lo
- * que el cliente firma — si la IA rellenara unas horas o una cantidad de
- * material que no dijo nadie, el parte dejaría de ser un registro de la
- * realidad para ser una redacción plausible de ella.
+ * NO ES UN ASISTENTE QUE ESTIME LO QUE HAY QUE HACER, es un asistente que
+ * ORDENA lo que el técnico ya ha dicho. La diferencia importa: un presupuesto
+ * es una previsión, así que tiene sentido que la IA proponga qué hará falta.
+ * Un parte de trabajo es el registro de lo que YA HA PASADO, y es lo que el
+ * cliente firma — si la IA rellenara unas horas o una cantidad de material
+ * que no dijo nadie, el parte dejaría de ser un registro de la realidad para
+ * ser una redacción plausible de ella. Por eso el prompt exige 0 en cualquier
+ * CANTIDAD que el técnico no haya dicho, y esta ruta no se fía de que el
+ * modelo lo cumpla: cualquier línea sin cantidad se manda de vuelta en
+ * `revisar`, igual que `faltan()` hace con un presupuesto incompleto.
  *
- * Por eso el prompt exige 0 en cualquier cifra que el técnico no haya dicho
- * explícitamente, y esta ruta NO SE FÍA de que el modelo lo cumpla: cualquier
- * línea que llegue sin cantidad se manda de vuelta al cliente en `revisar`,
- * igual que `faltan()` hace con un presupuesto incompleto. Y el precio nunca
- * lo pone la IA — sale del catálogo si hay coincidencia, o se queda a 0 para
- * que lo ponga el técnico o administración, como cualquier línea manual.
+ * El PRECIO es distinto, y aquí sí se aproxima cuando hace falta: lo que el
+ * técnico ha usado y cuánto es un hecho que solo él conoce, pero cuánto vale
+ * en el mercado no lo es — es lo mismo que ya sabe estimar el asistente de
+ * presupuestos con el baremo. El catálogo de la empresa manda siempre que
+ * haya coincidencia; cuando no la hay, se deja aproximar y la línea se
+ * SEÑALA como aproximación en `revisar`, exactamente igual que las cantidades
+ * sin decir. Nunca entra como si fuera un precio confirmado.
  */
 export async function POST(req: Request) {
   let empresaId: string;
@@ -75,7 +79,7 @@ export async function POST(req: Request) {
     .filter((p) => p.tipo !== "PARTIDA")
     .map((p) => ({ nombre: p.nombre, descripcion: p.descripcion, capitulo: null, unidad: p.unidad, precio: p.precio }));
 
-  const prompt = `Eres un ayudante que ESTRUCTURA en líneas lo que un técnico ha dictado tras una visita de obra. No calculas nada, no estimas nada, no rellenas huecos: solo separas en líneas lo que el técnico YA HA DICHO con sus propias palabras.
+  const prompt = `Eres un ayudante que ESTRUCTURA en líneas lo que un técnico ha dictado tras una visita de obra. No calculas ni adivinas CANTIDADES, no rellenas huecos: solo separas en líneas lo que el técnico YA HA DICHO con sus propias palabras. El precio de mercado es la única cifra que sí puedes aproximar, con el criterio de un jefe de obra español — nunca las horas ni las cantidades.
 
 ${comoDato("descripción dictada por el técnico", descripcion)}
 
@@ -85,12 +89,12 @@ REGLAS, TODAS OBLIGATORIAS Y SIN EXCEPCIÓN:
 - Una línea de MATERIAL por cada material que el técnico nombre.
 - "cantidad" va a 0 si el técnico NO ha dicho cuántas unidades, metros, litros, etc. Prohibido adivinar una cantidad "razonable": si no hay un número dicho, es 0.
 - "unidad" del material: ud, m, m², m³, kg, l, ml, caja, saco, rollo — la que mejor encaje; si no está claro, "ud".
-- "precio" va SIEMPRE a 0 en las dos listas, en todas las líneas, sin excepción. El precio no lo decides tú: lo pone el catálogo de la empresa o el propio técnico.
+- "precioAprox": una aproximación de mercado español, calidad media, 2026 — SOLO para orientar, el catálogo de la empresa la sustituirá si coincide con algo tarifado. Para MANO DE OBRA es €/hora: un oficial de fontanería o electricidad ronda 24-28 €/h, uno de albañilería o pintura 18-23 €/h, un peón menos. Para MATERIAL es €/unidad dicha: el precio de venta al público habitual en España de ese artículo en esa cantidad. Si de verdad no tienes ninguna base para aproximarlo, pon 0 — no fuerces un número solo por rellenar el campo.
 - PROHIBIDO añadir ninguna tarea ni ningún material que el texto no nombre, por muy obvio que parezca que hacía falta. Si el técnico no lo dijo, no existe.
 - Si el técnico no ha dicho nada de mano de obra, o nada de material, esa lista se queda vacía. No inventes una línea para no dejarla en blanco.
 
 Devuelve SOLO este JSON, sin explicación ni texto alrededor:
-{"manoObra":[{"concepto":"...","horas":0}],"material":[{"concepto":"...","cantidad":0,"unidad":"ud"}]}`;
+{"manoObra":[{"concepto":"...","horas":0,"precioAprox":0}],"material":[{"concepto":"...","cantidad":0,"unidad":"ud","precioAprox":0}]}`;
 
   const partes: Parte[] = [{ text: prompt }];
 
@@ -113,7 +117,10 @@ Devuelve SOLO este JSON, sin explicación ni texto alrededor:
         // trataría como "sin cantidad", que es exactamente lo correcto.
         cantidad: Math.max(0, Number(l.horas) || 0),
         unidad: "h",
-        precio: 0,
+        // Punto de partida: si el catálogo tiene coincidencia lo sustituye
+        // entero más abajo. Si no la tiene, esto es lo único que hay, y por
+        // eso se marca como aproximación en `revisar` sin excepción.
+        precio: Math.max(0, Number(l.precioAprox) || 0),
         capitulo: "",
       }))
       .filter((l) => l.concepto);
@@ -125,7 +132,7 @@ Devuelve SOLO este JSON, sin explicación ni texto alrededor:
         descripcion: "",
         cantidad: Math.max(0, Number(l.cantidad) || 0),
         unidad: String(l.unidad ?? "ud").trim() || "ud",
-        precio: 0,
+        precio: Math.max(0, Number(l.precioAprox) || 0),
         capitulo: "",
       }))
       .filter((l) => l.concepto);
@@ -136,7 +143,7 @@ Devuelve SOLO este JSON, sin explicación ni texto alrededor:
 
     // El catálogo pone el precio real cuando hay coincidencia clara — el mismo
     // criterio, ya probado, que usan los presupuestos. Si no hay coincidencia,
-    // la línea se queda a precio 0: nunca lo inventa la IA.
+    // se queda la aproximación del modelo, y esa línea se señala como tal.
     const { lineas: manoObraConPrecio, aplicadas: aplicadasManoObra } = aplicarCatalogo(manoObraCruda, catalogoManoObra);
     const { lineas: materialConPrecio, aplicadas: aplicadasMaterial } = aplicarCatalogo(materialCrudo, catalogoMaterial);
 
@@ -148,10 +155,17 @@ Devuelve SOLO este JSON, sin explicación ni texto alrededor:
       ...materialConPrecio.map((l) => ({ tipo: "MATERIAL" as const, concepto: l.concepto, cantidad: l.cantidad, unidad: l.unidad, precio: l.precio })),
     ];
 
+    // Una línea es "del catálogo" si su concepto quedó sustituido por el
+    // nombre exacto de una partida tarifada — que es justo lo que hace
+    // `aplicarCatalogo` cuando encuentra coincidencia y lo que lista en
+    // `aplicadas`. Cualquier otro concepto sigue siendo el que propuso la IA.
+    const aplicadas = [...aplicadasManoObra, ...aplicadasMaterial];
+    const deCatalogo = new Set(aplicadas);
+
     return NextResponse.json({
       lineas,
-      aplicadas: [...aplicadasManoObra, ...aplicadasMaterial],
-      revisar: lineasSinCantidad(lineas),
+      aplicadas,
+      revisar: [...lineasSinCantidad(lineas), ...lineasSinCatalogo(lineas, deCatalogo)],
     });
   } catch (e: any) {
     console.error("Error generando parte con IA:", e);

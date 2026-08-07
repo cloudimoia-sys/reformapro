@@ -20,6 +20,7 @@ import {
   agregarLinea,
   agregarMaterialDelCatalogo,
   agregarLineasGeneradas,
+  guardarLineaEnCatalogo,
   actualizarLinea,
   borrarLinea,
   anadirFotos,
@@ -149,6 +150,10 @@ export default function ParteEditor({
     aplicadas: string[];
   } | null>(null);
   const [errorIA, setErrorIA] = useState("");
+  /** Líneas de la propuesta ya guardadas en el catálogo, para no ofrecer el
+   *  botón dos veces sobre la misma fila. Se indexa por `key`, la clave local
+   *  de la propuesta, no por id: estas líneas todavía no existen en la BD. */
+  const [guardadasIA, setGuardadasIA] = useState<Record<string, string>>({});
   /** "Trabajo realizado" es un textarea sin controlar (solo guarda al salir del
    *  campo, `onBlur`). Si el técnico pulsa "Generar con IA" recién escrito y sin
    *  haber cambiado de campo, `p.descripcion` todavía tendría el texto viejo:
@@ -304,6 +309,20 @@ export default function ParteEditor({
 
   const quitarDePreviaIA = (key: string) => {
     setPreviaIA((prev) => (prev ? { ...prev, lineas: prev.lineas.filter((l) => l.key !== key) } : prev));
+  };
+
+  /**
+   * Guarda una línea de la propuesta en el catálogo, con el precio que haya
+   * quedado tras revisarla — el mismo bucle que ya existe en presupuestos.
+   *
+   * Es aquí, en la revisión, donde más falta hace: una línea que llegó
+   * aproximada porque no estaba en el catálogo es justo la que conviene
+   * guardar, para que la próxima vez ya no haga falta aproximar nada.
+   */
+  const guardarLineaPreviaEnCatalogo = async (l: LineaGeneradaParte & { key: string }) => {
+    const r = await guardarLineaEnCatalogo({ tipo: l.tipo, concepto: l.concepto, unidad: l.unidad, precio: l.precio });
+    if (!r.ok) return setErrorIA(r.error);
+    setGuardadasIA((g) => ({ ...g, [l.key]: r.datos === "actualizada" ? "Actualizada" : "Guardada" }));
   };
 
   /** Vuelca la propuesta ya revisada en el parte, de una vez. */
@@ -561,46 +580,75 @@ export default function ParteEditor({
                 </tr>
               </thead>
               <tbody>
-                {previaIA.lineas.map((l) => (
-                  <tr key={l.key} style={!l.cantidad ? { background: "#FCF0D8" } : undefined}>
-                    <td>{ETIQUETA_TIPO_LINEA[l.tipo]}</td>
-                    <td>
-                      <input
-                        className="inp"
-                        value={l.concepto}
-                        onChange={(e) => editarPreviaIA(l.key, { concepto: e.target.value })}
-                      />
-                    </td>
-                    <td style={{ width: 90 }}>
-                      <input
-                        className="inp"
-                        type="number"
-                        step="0.5"
-                        value={l.cantidad}
-                        onChange={(e) => editarPreviaIA(l.key, { cantidad: Number(e.target.value) })}
-                      />
-                    </td>
-                    <td style={{ width: 70 }}>
-                      <input
-                        className="inp"
-                        value={l.unidad}
-                        onChange={(e) => editarPreviaIA(l.key, { unidad: e.target.value })}
-                      />
-                    </td>
-                    <td style={{ width: 90 }}>
-                      <input
-                        className="inp"
-                        type="number"
-                        step="0.01"
-                        value={l.precio}
-                        onChange={(e) => editarPreviaIA(l.key, { precio: Number(e.target.value) })}
-                      />
-                    </td>
-                    <td>
-                      <button className="btn sm red" onClick={() => quitarDePreviaIA(l.key)}>×</button>
-                    </td>
-                  </tr>
-                ))}
+                {previaIA.lineas.map((l) => {
+                  // No viene del catálogo si su concepto no es exactamente el
+                  // nombre de una partida aplicada: es la aproximación de la
+                  // IA, no un precio confirmado.
+                  const esAproximado = !previaIA.aplicadas.includes(l.concepto);
+                  return (
+                    <tr key={l.key} style={!l.cantidad ? { background: "#FCF0D8" } : undefined}>
+                      <td>{ETIQUETA_TIPO_LINEA[l.tipo]}</td>
+                      <td style={{ minWidth: 160 }}>
+                        <input
+                          className="inp"
+                          value={l.concepto}
+                          onChange={(e) => editarPreviaIA(l.key, { concepto: e.target.value })}
+                        />
+                        <div style={{ marginTop: 3 }}>
+                          {l.precio > 0 &&
+                            (guardadasIA[l.key] ? (
+                              <span className="hint" style={{ color: "var(--ok)" }}>✓ {guardadasIA[l.key]} en tu catálogo</span>
+                            ) : (
+                              <button
+                                className="btn sm ghost"
+                                style={{ fontSize: 11, padding: "2px 7px" }}
+                                title="Guardar esta línea con este precio en tu catálogo, para no tener que aproximarla otra vez"
+                                onClick={() => guardarLineaPreviaEnCatalogo(l)}
+                              >
+                                + A mi catálogo
+                              </button>
+                            ))}
+                        </div>
+                      </td>
+                      <td style={{ width: 90 }}>
+                        <input
+                          className="inp"
+                          type="number"
+                          step="0.5"
+                          value={l.cantidad}
+                          onChange={(e) => editarPreviaIA(l.key, { cantidad: Number(e.target.value) })}
+                        />
+                      </td>
+                      <td style={{ width: 70 }}>
+                        <input
+                          className="inp"
+                          value={l.unidad}
+                          onChange={(e) => editarPreviaIA(l.key, { unidad: e.target.value })}
+                        />
+                      </td>
+                      <td style={{ width: 90 }}>
+                        <input
+                          className="inp"
+                          type="number"
+                          step="0.01"
+                          value={l.precio}
+                          onChange={(e) => editarPreviaIA(l.key, { precio: Number(e.target.value) })}
+                        />
+                        {/* Aviso corto junto al precio: el texto completo ya está en la
+                            lista de "revisar" de arriba, esto es solo para verlo sin
+                            tener que subir la vista al leer cada fila. */}
+                        {esAproximado && (
+                          <div className="hint" style={{ fontSize: 10, color: "var(--amber-d, #92400e)" }}>
+                            {l.precio > 0 ? "aprox." : "sin precio"}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <button className="btn sm red" onClick={() => quitarDePreviaIA(l.key)}>×</button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             <div className="row" style={{ marginTop: 10 }}>

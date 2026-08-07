@@ -9,8 +9,15 @@
  * Lo que SÍ hay ahora es una IA que ESTRUCTURA lo que el técnico ya ha dicho:
  * dicta una descripción con sus propias cifras dentro y la IA la separa en
  * líneas de mano de obra y de material, buscando el material en el catálogo.
- * No estima nada que no esté dicho — ver `lineasSinCantidad` más abajo, que es
- * la comprobación que impide que un hueco se rellene solo.
+ * No estima ninguna cantidad que no esté dicha — ver `lineasSinCantidad` más
+ * abajo, que es la comprobación que impide que un hueco de cantidad se
+ * rellene solo.
+ *
+ * El PRECIO es la única excepción, y a propósito: si no hay nada en el
+ * catálogo con lo que casar la línea, se aproxima un precio de mercado en vez
+ * de dejarlo a 0 sin más. Pero una aproximación se trata como lo que es —ver
+ * `lineasSinCatalogo`—: se señala siempre, para que alguien la confirme o la
+ * corrija antes de que el parte quede firmado.
  */
 
 export type LineaParteCalc = { tipo: "MANO_OBRA" | "MATERIAL"; cantidad: number; precio: number };
@@ -90,5 +97,29 @@ export function lineasSinCantidad(lineas: LineaGeneradaParte[]): string[] {
       l.tipo === "MANO_OBRA"
         ? `No has dicho cuántas horas dedicaste a "${l.concepto}": complétalo antes de guardar.`
         : `No has dicho cuánta cantidad de "${l.concepto}" usaste: complétalo antes de guardar.`
+    );
+}
+
+/**
+ * Líneas cuyo precio NO sale del catálogo de la empresa.
+ *
+ * Cuando el material o la tarea no está en el catálogo, la IA aproxima un
+ * precio de mercado en vez de dejar el hueco a 0 sin más — así el parte no se
+ * queda con dos o tres líneas que hay que ir a mirar una a una. Pero una
+ * aproximación no es un dato confirmado, y aquí es donde se traza la línea:
+ * TODA línea que no venga del catálogo se señala, tenga o no precio, para que
+ * alguien la revise antes de que el parte quede firmado y sea demasiado tarde
+ * para corregirlo. Lo mismo que ya hace `lineasSinCantidad`, pero para precio.
+ */
+export function lineasSinCatalogo(
+  lineas: LineaGeneradaParte[],
+  conceptosDeCatalogo: ReadonlySet<string>
+): string[] {
+  return lineas
+    .filter((l) => !conceptosDeCatalogo.has(l.concepto))
+    .map((l) =>
+      l.precio > 0
+        ? `El precio de "${l.concepto}" es una aproximación de mercado, no de tu catálogo: revísalo antes de guardar.`
+        : `No se ha podido aproximar un precio para "${l.concepto}": ponlo tú antes de guardar.`
     );
 }

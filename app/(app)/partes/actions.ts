@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { requireTenant, requireTenantAdmin, type ContextoTenant } from "@/lib/session";
 import { ejecutar, type Resultado, type ResultadoConRedirect } from "@/lib/accion";
 import { siguienteNumero } from "@/lib/counter";
+import { guardarEnCatalogo } from "@/lib/catalogo";
 
 const BLOQUEADO_ESTADOS = ["FIRMADO"];
 
@@ -143,6 +144,40 @@ export async function agregarLineasGeneradas(parteId: string, lineas: LineaParte
       data: lineas.map((l, i) => ({ empresaId, parteId, ...l, orden: count + i })),
     });
     revalidatePath(`/partes/${parteId}`);
+  });
+}
+
+export type LineaAlCatalogo = {
+  tipo: "MANO_OBRA" | "MATERIAL";
+  concepto: string;
+  unidad: string;
+  precio: number;
+};
+
+/**
+ * Guarda en el catálogo una línea de la propuesta de la IA (o ya del parte),
+ * con el precio que el técnico haya dejado tras revisarla.
+ *
+ * Es el mismo bucle que ya existe en presupuestos: la próxima vez que salga
+ * este material o esta tarea, la IA lo encuentra en el catálogo y deja de
+ * necesitar aproximarlo. MANO_OBRA se guarda como PARTIDA (una unidad de obra
+ * propia, con lo que cobra ese trabajo) y MATERIAL como MATERIAL — son
+ * catálogos distintos y no deben pisarse: un "Grifo monomando" que se compra
+ * no es lo mismo que un "Grifo monomando" facturado como partida cerrada.
+ */
+export async function guardarLineaEnCatalogo(datos: LineaAlCatalogo): Promise<Resultado<"creada" | "actualizada">> {
+  return ejecutar("guardarLineaEnCatalogo", async () => {
+    const { db, empresaId } = await requireTenant();
+    const resultado = await guardarEnCatalogo(db, empresaId, {
+      concepto: datos.concepto,
+      descripcion: "",
+      capitulo: "",
+      unidad: datos.unidad,
+      precio: datos.precio,
+      tipo: datos.tipo === "MANO_OBRA" ? "PARTIDA" : "MATERIAL",
+    });
+    revalidatePath("/catalogo");
+    return resultado;
   });
 }
 

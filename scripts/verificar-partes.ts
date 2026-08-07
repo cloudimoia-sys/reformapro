@@ -18,6 +18,7 @@ import {
   estadoParteClase,
   estadoParteLabel,
   lineasSinCantidad,
+  lineasSinCatalogo,
   type LineaParteCalc,
   type LineaGeneradaParte,
 } from "../lib/parteTrabajo";
@@ -163,6 +164,47 @@ const mixto = lineasSinCantidad([g("MANO_OBRA", "Tarea A", 3), g("MANO_OBRA", "T
 if (mixto.length !== 1) {
   mal("mixto", `debía señalar 1 línea de 3 y señaló ${mixto.length}`);
 } else bien("con varias líneas, solo se señalan las que de verdad no tienen cantidad");
+
+// ───────── La aproximación de precio se marca siempre, no se cuela ─────────
+console.log("\nlineasSinCatalogo: la aproximación de precio nunca pasa por confirmada");
+
+const gp = (tipo: "MANO_OBRA" | "MATERIAL", concepto: string, precio: number): LineaGeneradaParte => ({
+  tipo,
+  concepto,
+  cantidad: 1,
+  unidad: tipo === "MANO_OBRA" ? "h" : "ud",
+  precio,
+});
+
+// Una línea que SÍ vino del catálogo (su concepto está en el set) no se marca,
+// aunque tenga precio: es un dato real, no una aproximación.
+const soloCatalogo = new Set(["Montaje de grifería"]);
+if (lineasSinCatalogo([gp("MANO_OBRA", "Montaje de grifería", 24)], soloCatalogo).length) {
+  mal("del catálogo", "marca como aproximación una línea que sí vino del catálogo");
+} else bien("una línea que vino del catálogo no se marca, tenga el precio que tenga");
+
+// Una línea que NO vino del catálogo y tiene un precio: es una aproximación, y
+// se marca SIEMPRE, precisamente porque nadie la ha confirmado todavía.
+const conAproximado = lineasSinCatalogo([gp("MATERIAL", "Grifo monomando Roca", 45)], new Set());
+if (conAproximado.length !== 1 || !/aproximaci[oó]n/.test(conAproximado[0])) {
+  mal("aproximado con precio", "no marca la línea, o el mensaje no habla de aproximación");
+} else bien("una línea sin catálogo y con precio se marca como aproximación, siempre");
+
+// Y si ni siquiera hay aproximación (precio en 0), el mensaje es otro: no hay
+// nada que confirmar, hay que ponerlo desde cero.
+const sinPrecio = lineasSinCatalogo([gp("MATERIAL", "Pieza rara", 0)], new Set());
+if (sinPrecio.length !== 1 || !/no se ha podido aproximar/i.test(sinPrecio[0])) {
+  mal("sin precio", "no distingue entre «aproximado» y «no se ha podido aproximar nada»");
+} else bien("sin aproximación posible, el mensaje pide ponerlo, no habla de revisar una cifra");
+
+// Con varias líneas, solo se marcan las que de verdad no vienen del catálogo.
+const mezcla = lineasSinCatalogo(
+  [gp("MANO_OBRA", "Del catálogo", 24), gp("MATERIAL", "Aproximado", 12), gp("MATERIAL", "Sin precio", 0)],
+  new Set(["Del catálogo"])
+);
+if (mezcla.length !== 2) {
+  mal("mezcla", `debía marcar 2 de 3 líneas y marcó ${mezcla.length}`);
+} else bien("con varias líneas, solo se marcan las que no vienen del catálogo");
 
 console.log("");
 if (fallos) {

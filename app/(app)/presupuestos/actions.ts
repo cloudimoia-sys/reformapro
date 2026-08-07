@@ -4,10 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { requireTenant, requireTenantAdmin, type ContextoTenant } from "@/lib/session";
-import { normalizarUnidad } from "@/lib/unidades";
 import { ejecutar, type Resultado, type ResultadoConRedirect } from "@/lib/accion";
 import { siguienteNumero } from "@/lib/counter";
 import { desglosePres } from "@/lib/presupuesto";
+import { guardarEnCatalogo, type PartidaAlCatalogo as CatalogoPartidaAlCatalogo } from "@/lib/catalogo";
 
 const BLOQUEADO_ESTADOS = ["APROBADO", "FACTURADO"];
 
@@ -342,13 +342,9 @@ export async function crearFacturaDesdePresupuesto(presupuestoId: string): Promi
   });
 }
 
-export type PartidaAlCatalogo = {
-  concepto: string;
-  descripcion: string;
-  capitulo: string;
-  unidad: string;
-  precio: number;
-};
+/** Solo el precio: en un presupuesto, lo que se guarda siempre es una
+ *  unidad de obra propia, nunca un material suelto. */
+export type PartidaAlCatalogo = Omit<CatalogoPartidaAlCatalogo, "tipo">;
 
 /**
  * Guarda en el catálogo una partida corregida a mano en un presupuesto.
@@ -358,47 +354,15 @@ export type PartidaAlCatalogo = {
  * clic y la próxima vez ese trabajo sale con TU precio en lugar de con uno
  * estimado. Cuantas más veces lo haces, menos queda por inventar.
  *
- * Hasta ahora había que ir al catálogo y teclear la partida entera a mano, así
- * que en la práctica no se hacía y el asistente seguía estimando para siempre.
- *
- * Si la partida ya existe con ese nombre se ACTUALIZA el precio en vez de
- * duplicarla: un catálogo con tres "Sustitución de inodoro" a precios distintos
- * es peor que no tenerlo, porque la coincidencia elige una al azar.
+ * La lógica de guardado vive en `lib/catalogo.ts`, compartida con los partes
+ * de trabajo: aquí solo se fija el tipo en "PARTIDA", que es lo único que un
+ * presupuesto guarda en el catálogo — nunca un material suelto.
  */
 export async function guardarPartidaEnCatalogo(datos: PartidaAlCatalogo): Promise<Resultado<"creada" | "actualizada">> {
   return ejecutar("guardarPartidaEnCatalogo", async () => {
     const { db, empresaId } = await requireTenant();
-
-    const nombre = (datos.concepto || "").trim();
-    if (!nombre) throw new Error("La partida necesita un concepto para guardarla.");
-    const precio = Number(datos.precio);
-    if (!Number.isFinite(precio) || precio <= 0) throw new Error("Pon un precio antes de guardarla.");
-
-    const comun = {
-      descripcion: datos.descripcion?.trim() || null,
-      capitulo: datos.capitulo?.trim() || null,
-      unidad: normalizarUnidad(datos.unidad),
-      precio,
-      fecha: new Date(),
-    };
-
-    // Se busca por nombre exacto sin distinguir mayúsculas: es como lo escribiría
-    // el usuario dos veces.
-    const existente = await db.producto.findFirst({
-      where: { tipo: "PARTIDA", nombre: { equals: nombre, mode: "insensitive" } },
-      select: { id: true },
-    });
-
-    if (existente) {
-      await db.producto.updateMany({ where: { id: existente.id }, data: comun });
-      revalidatePath("/catalogo");
-      return "actualizada" as const;
-    }
-
-    await db.producto.create({
-      data: { ...comun, empresaId, tipo: "PARTIDA", nombre, provId: null, url: null },
-    });
+    const resultado = await guardarEnCatalogo(db, empresaId, { ...datos, tipo: "PARTIDA" });
     revalidatePath("/catalogo");
-    return "creada" as const;
+    return resultado;
   });
 }
