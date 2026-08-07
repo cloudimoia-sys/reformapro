@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { requireTenant } from "@/lib/session";
 import { limiteIaSuperado, ERROR_LIMITE_IA } from "@/lib/limite";
 import { llamarAGemini, respuestaDeError, leerJson, comoDato } from "@/lib/gemini";
-import { buscarNormativa, AVISO_NORMATIVA } from "@/lib/normativa";
+import {
+  buscarNormativa,
+  invocaNormativaSinRespaldo,
+  AVISO_NORMATIVA,
+  AVISO_PRACTICA,
+} from "@/lib/normativa";
 import { calcularDesdePregunta } from "@/lib/calculos";
 import { BAREMO } from "@/lib/baremo";
 import { importeLinea } from "@/lib/presupuesto";
@@ -109,15 +114,37 @@ PRECIOS DE REFERENCIA DE LA APLICACIÓN (mercado español, calidad media, unidad
 ${BAREMO.slice(0, 40).map((p) => `- ${p.concepto}: ${p.conMaterial} €/${p.unidad}`).join("\n")}`
     : "";
 
-  const bloqueNormativa = entradas.length
+  /**
+   * Los dos tipos de dato viajan en bloques separados, y eso es intencionado.
+   *
+   * Si fueran en una sola lista, el modelo redactaría "según el CTE, la
+   * grifería del lavabo va a 55-60 cm" en cuanto una entrada de normativa y una
+   * de práctica cayeran juntas en la misma respuesta — que es exactamente el
+   * caso más frecuente. Separados y con instrucciones distintas, no tiene por
+   * dónde confundirlos.
+   */
+  const deNormativa = entradas.filter((e) => e.tipo === "normativa");
+  const dePractica = entradas.filter((e) => e.tipo === "practica");
+
+  const describir = (e: (typeof entradas)[number]) =>
+    `- ${e.tema}\n  Dato: ${e.respuesta}\n  Fuente: ${e.fuente}${e.matiz ? `\n  Matiz: ${e.matiz}` : ""}`;
+
+  const bloqueNormativa = deNormativa.length
     ? `
-DATOS DE NORMATIVA VERIFICADOS. Son los ÚNICOS que puedes citar:
-${entradas
-  .map(
-    (e) =>
-      `- ${e.tema}\n  Dato: ${e.respuesta}\n  Fuente: ${e.fuente}${e.matiz ? `\n  Matiz: ${e.matiz}` : ""}`
-  )
-  .join("\n")}`
+DATOS DE NORMATIVA VERIFICADOS (obligado cumplimiento). Son los ÚNICOS con los que puedes afirmar que algo es exigible:
+${deNormativa.map(describir).join("\n")}`
+    : "";
+
+  const bloquePractica = dePractica.length
+    ? `
+PRÁCTICA HABITUAL DEL OFICIO (NO es normativa, NO es exigible):
+${dePractica.map(describir).join("\n")}
+
+Cómo usar este bloque, sin excepción:
+- Da el dato, que es útil y es lo que se hace en obra.
+- Di SIEMPRE y de forma explícita que es la práctica habitual y no una exigencia.
+- NUNCA lo atribuyas al CTE, al REBT ni a ninguna norma, y no digas "es obligatorio" ni "hay que" al hablar de estos valores.
+- Remite a la ficha técnica del producto o a la hoja de montaje del aparato, que es lo que de verdad manda aquí.`
     : "";
 
   const bloqueCalculo = calculo
@@ -141,10 +168,11 @@ CÁLCULO YA HECHO POR LA APLICACIÓN. El número es este, no lo recalcules:
 REGLA QUE NO PUEDES SALTARTE
 No aportas datos propios. Solo puedes usar lo que viene en los bloques de abajo. En concreto:
 - NO cites ningún artículo, tabla o valor de normativa que no esté en "DATOS DE NORMATIVA VERIFICADOS". Ni uno.
+- NO conviertas en exigencia lo que venga en "PRÁCTICA HABITUAL DEL OFICIO". Es costumbre, y se dice que lo es.
 - NO hagas cálculos de tu cabeza. Si hay un bloque de cálculo, el resultado es ese.
 - Si la pregunta necesita un dato que no tienes, dilo claramente y di dónde mirarlo. Es la respuesta correcta, no un fracaso.
 Un constructor que ejecuta con un dato inventado y no pasa la inspección se vuelve contra quien se lo dio. Prefiere quedarte corto.
-${bloqueNormativa}${bloqueCalculo}${contextoObra}${bloquePrecios}
+${bloqueNormativa}${bloquePractica}${bloqueCalculo}${contextoObra}${bloquePrecios}
 ${hayDatos ? "" : "\nNO HAY DATOS para esta pregunta. Responde que no lo tienes cargado, sugiere dónde consultarlo y ofrécete a ayudar con lo que sí cubres: mediciones, cantidades de material, precios de referencia y las partidas del presupuesto abierto.\n"}
 ${historial ? `CONVERSACIÓN HASTA AHORA:\n${historial}\n` : ""}
 PREGUNTA:
@@ -178,14 +206,40 @@ Responde en JSON:
      * era honesta y la cita la desmentía, que es peor que no citar nada.
      */
     const sinDatos = !hayDatos || parsed.seguridad === "sin_datos";
+    const citadas = sinDatos ? [] : entradas;
+
+    /**
+     * Cada tipo de dato lleva su aviso, y si la respuesta se apoya en los dos
+     * salen los dos. Antes había uno solo porque solo había normativa.
+     */
+    const avisos: string[] = [];
+    if (citadas.some((e) => e.tipo === "normativa")) avisos.push(AVISO_NORMATIVA);
+    if (citadas.some((e) => e.tipo === "practica")) avisos.push(AVISO_PRACTICA);
+
+    /**
+     * Última comprobación, en código y no por prompt: si la respuesta se apoya
+     * SOLO en práctica del oficio pero el texto invoca el CTE o habla de
+     * obligación, se corrige aquí. El dato sigue siendo útil; lo que no puede
+     * salir de aquí es la autoridad legal que no tiene.
+     */
+    if (!sinDatos && invocaNormativaSinRespaldo(respuesta, citadas)) {
+      avisos.unshift(
+        "Ojo: esta respuesta habla de obligación o cita normativa, pero no se apoya en ningún dato normativo cargado. Trátala como práctica del oficio y compruébala antes de darla por exigible."
+      );
+    }
 
     return NextResponse.json({
       respuesta,
       // Las fuentes las manda el servidor, no el modelo: así lo que se cita
       // siempre existe, aunque el texto de la respuesta se desvíe.
-      fuentes: sinDatos ? [] : entradas.map((e) => ({ tema: e.tema, fuente: e.fuente, revisado: !!e.revisado })),
+      fuentes: citadas.map((e) => ({
+        tema: e.tema,
+        fuente: e.fuente,
+        tipo: e.tipo,
+        revisado: !!e.revisado,
+      })),
       calculo,
-      aviso: !sinDatos && entradas.length ? AVISO_NORMATIVA : null,
+      avisos,
       sinDatos,
     });
   } catch (e: any) {

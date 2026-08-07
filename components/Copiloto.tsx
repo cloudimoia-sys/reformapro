@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Dictar from "@/components/Dictar";
 
-type Fuente = { tema: string; fuente: string; revisado: boolean };
+type Fuente = { tema: string; fuente: string; tipo: "normativa" | "practica"; revisado: boolean };
 type Calculo = {
   titulo: string;
   detalle: { concepto: string; valor: string }[];
@@ -15,15 +15,17 @@ type Mensaje = {
   texto: string;
   fuentes?: Fuente[];
   calculo?: Calculo | null;
-  aviso?: string | null;
+  avisos?: string[];
   sinDatos?: boolean;
 };
 
 const EJEMPLOS = [
   "¿Qué pendiente necesita el desagüe del lavabo?",
+  "¿A qué altura va la grifería del lavabo?",
+  "¿Cuánto tarda en fraguar el cemento cola rápido?",
   "¿Cuántos sacos de cemento para 8 m² de solado?",
   "¿Qué sección de cable lleva el circuito de la cocina?",
-  "¿Cuántas baldosas de 60x60 para 12 m²?",
+  "¿A qué altura se ponen los enchufes?",
   "¿Qué altura tiene que tener la barandilla?",
   "¿Qué caudal de ventilación necesita un baño?",
 ];
@@ -68,7 +70,7 @@ export default function Copiloto({ presupuestoId }: { presupuestoId?: string }) 
           texto: d.respuesta,
           fuentes: d.fuentes,
           calculo: d.calculo,
-          aviso: d.aviso,
+          avisos: d.avisos,
           sinDatos: d.sinDatos,
         },
       ]);
@@ -83,8 +85,10 @@ export default function Copiloto({ presupuestoId }: { presupuestoId?: string }) 
     <div className="card">
       <h2 style={{ fontSize: 22, marginBottom: 4 }}>Copiloto técnico</h2>
       <p className="hint" style={{ marginTop: 0 }}>
-        Responde sobre normativa española y cantidades de material. <strong>Solo con datos cargados y con su fuente
-        citada</strong>: lo que no tiene, lo dice en vez de inventárselo. Los cálculos los hace la aplicación, no la IA.
+        Responde sobre normativa española, práctica de obra y cantidades de material. <strong>Solo con datos cargados y
+        con su fuente citada</strong>: lo que no tiene, lo dice en vez de inventárselo. Distingue siempre lo que es
+        norma de obligado cumplimiento (📖) de lo que es costumbre del oficio (🔧), que orienta pero no obliga. Los
+        cálculos los hace la aplicación, no la IA.
         {presupuestoId && " Conoce las partidas del presupuesto que tienes abierto."}
       </p>
 
@@ -137,18 +141,30 @@ export default function Copiloto({ presupuestoId }: { presupuestoId?: string }) 
                   </div>
                 )}
 
+                {/*
+                  Norma y costumbre se pintan distinto a propósito. Con un solo
+                  icono para las dos, un reformista con prisa lee "📖 …" y da por
+                  hecho que todo lo de arriba se lo exige alguien.
+                */}
                 {!!m.fuentes?.length && (
                   <div style={{ marginTop: 8, fontSize: 12, color: "var(--mut)" }}>
                     {m.fuentes.map((f, k) => (
                       <div key={k}>
-                        📖 {f.fuente}
-                        {!f.revisado && " · pendiente de contrastar con el texto oficial"}
+                        {f.tipo === "normativa" ? "📖 Normativa: " : "🔧 Práctica del oficio: "}
+                        {f.fuente}
+                        {f.tipo === "normativa" &&
+                          !f.revisado &&
+                          " · pendiente de contrastar con el texto oficial"}
                       </div>
                     ))}
                   </div>
                 )}
 
-                {m.aviso && <p className="hint" style={{ marginTop: 6 }}>{m.aviso}</p>}
+                {m.avisos?.map((a, k) => (
+                  <p key={k} className="hint" style={{ marginTop: 6 }}>
+                    {a}
+                  </p>
+                ))}
                 {m.sinDatos && !m.fuentes?.length && (
                   <p className="hint" style={{ marginTop: 6, color: "var(--amber-d, #92400e)" }}>
                     Esta respuesta no se apoya en ningún dato cargado.

@@ -22,10 +22,11 @@
     "test:suscripcion": "tsx scripts/verificar-suscripcion.ts",
     "test:facturacion": "tsx scripts/verificar-facturacion.ts",
     "test:presupuestos": "npm run test:catalogo && npm run test:precios && npm run test:sobrantes && npm run test:completitud",
-    "test:todo": "npm run test:presupuestos && npm run test:diagnostico && npm run test:planificacion && npm run test:suscripcion && npm run test:facturacion && npm run test:energia && npm run test:texto && npm run test:partes",
+    "test:todo": "npm run test:presupuestos && npm run test:diagnostico && npm run test:planificacion && npm run test:suscripcion && npm run test:facturacion && npm run test:energia && npm run test:texto && npm run test:partes && npm run test:normativa",
     "test:energia": "tsx scripts/verificar-energia.ts",
     "test:texto": "tsx scripts/verificar-texto.ts",
-    "test:partes": "tsx scripts/verificar-partes.ts"
+    "test:partes": "tsx scripts/verificar-partes.ts",
+    "test:normativa": "tsx scripts/verificar-normativa.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
