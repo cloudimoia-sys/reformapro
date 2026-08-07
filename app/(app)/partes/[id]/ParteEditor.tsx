@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { eur } from "@/lib/format";
-import { estadoParteClase, estadoParteLabel, importeLineaParte, totalesParte, ETIQUETA_TIPO_LINEA } from "@/lib/parteTrabajo";
+import {
+  estadoParteClase,
+  estadoParteLabel,
+  importeLineaParte,
+  totalesParte,
+  ETIQUETA_TIPO_LINEA,
+  type LineaGeneradaParte,
+} from "@/lib/parteTrabajo";
 import { exportParteImprimir, exportParteWord, exportParteExcel } from "@/lib/parteExport";
 import SignaturePad from "@/components/SignaturePad";
 import SelectUnidad from "@/components/SelectUnidad";
@@ -12,6 +19,7 @@ import {
   actualizarParte,
   agregarLinea,
   agregarMaterialDelCatalogo,
+  agregarLineasGeneradas,
   actualizarLinea,
   borrarLinea,
   anadirFotos,
@@ -127,6 +135,26 @@ export default function ParteEditor({
   const [subiendoFotos, setSubiendoFotos] = useState(false);
   const [error, setError] = useState("");
 
+  /**
+   * Propuesta de la IA a partir de lo dictado en "Trabajo realizado", A LA
+   * ESPERA de que el técnico la revise. No se guarda nada en el parte hasta
+   * que él pulsa "Añadir estas líneas": así una generación que sale mal (o
+   * que decide corregir en el propio cuadro antes de aceptar) no ensucia el
+   * parte con líneas a medio hacer.
+   */
+  const [generandoIA, setGenerandoIA] = useState(false);
+  const [previaIA, setPreviaIA] = useState<{
+    lineas: (LineaGeneradaParte & { key: string })[];
+    revisar: string[];
+    aplicadas: string[];
+  } | null>(null);
+  const [errorIA, setErrorIA] = useState("");
+  /** "Trabajo realizado" es un textarea sin controlar (solo guarda al salir del
+   *  campo, `onBlur`). Si el técnico pulsa "Generar con IA" recién escrito y sin
+   *  haber cambiado de campo, `p.descripcion` todavía tendría el texto viejo:
+   *  se lee el valor de verdad de aquí, no del estado. */
+  const descripcionRef = useRef<HTMLTextAreaElement>(null);
+
   // El Server Component padre vuelve a renderizar (con datos frescos de Prisma)
   // cada vez que una Server Action llama a revalidatePath/router.refresh(); sin
   // este efecto la interfaz se quedaría con los datos del primer render aunque
@@ -223,6 +251,77 @@ export default function ParteEditor({
     setP((prev) => ({ ...prev, fotos: prev.fotos.filter((f) => f.id !== id) }));
     const r = await borrarFoto(id);
     if (!avisar(r)) return;
+    router.refresh();
+  };
+
+  /**
+   * Estructura con IA lo que ya está escrito en "Trabajo realizado".
+   *
+   * No manda nada nuevo a dictar: usa el mismo texto que el técnico ya ha
+   * puesto ahí, porque es el mismo relato y no tiene sentido pedírselo dos
+   * veces. El resultado NO se guarda todavía — se enseña en un cuadro aparte
+   * para que lo revise antes de que entre en el parte.
+   */
+  const generarConIA = async () => {
+    const texto = (descripcionRef.current?.value ?? p.descripcion).trim();
+    if (!texto) return;
+    setGenerandoIA(true);
+    setErrorIA("");
+    setPreviaIA(null);
+    // Si el técnico ha escrito algo nuevo y todavía no ha salido del campo, se
+    // guarda ahora: lo que se estructura y lo que queda escrito en el parte
+    // tienen que ser siempre el mismo texto.
+    if (texto !== p.descripcion) commit({ descripcion: texto });
+    try {
+      const r = await fetch("/api/generar-parte", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ descripcion: texto }),
+      });
+      const d = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(d?.error || "No se pudo estructurar el texto.");
+      const lineas: LineaGeneradaParte[] = d.lineas || [];
+      if (!lineas.length) throw new Error("La IA no ha encontrado ninguna línea en el texto.");
+      setPreviaIA({
+        lineas: lineas.map((l, i) => ({ ...l, key: `${Date.now()}-${i}` })),
+        revisar: d.revisar || [],
+        aplicadas: d.aplicadas || [],
+      });
+    } catch (e: any) {
+      setErrorIA(e?.message || "No se pudo estructurar el texto.");
+    } finally {
+      setGenerandoIA(false);
+    }
+  };
+
+  /** Corrige un valor de la propuesta ANTES de aceptarla — típicamente, la
+   *  cantidad que la IA ha dejado a 0 porque el técnico no la dijo. */
+  const editarPreviaIA = (key: string, patch: Partial<LineaGeneradaParte>) => {
+    setPreviaIA((prev) =>
+      prev ? { ...prev, lineas: prev.lineas.map((l) => (l.key === key ? { ...l, ...patch } : l)) } : prev
+    );
+  };
+
+  const quitarDePreviaIA = (key: string) => {
+    setPreviaIA((prev) => (prev ? { ...prev, lineas: prev.lineas.filter((l) => l.key !== key) } : prev));
+  };
+
+  /** Vuelca la propuesta ya revisada en el parte, de una vez. */
+  const confirmarPreviaIA = async () => {
+    if (!previaIA?.lineas.length) return;
+    const nuevas: LineaParteInput[] = previaIA.lineas.map((l) => ({
+      tipo: l.tipo,
+      concepto: l.concepto,
+      descripcion: "",
+      cantidad: l.cantidad,
+      unidad: l.unidad,
+      precio: l.precio,
+    }));
+    setGenerandoIA(true);
+    const r = await agregarLineasGeneradas(p.id, nuevas);
+    setGenerandoIA(false);
+    if (!avisar(r)) return;
+    setPreviaIA(null);
     router.refresh();
   };
 
@@ -411,14 +510,112 @@ export default function ParteEditor({
             {!bloqueado && <Dictar onTexto={(t) => commit({ descripcion: `${p.descripcion}${p.descripcion ? " " : ""}${t}` })} />}
           </div>
           <textarea
+            ref={descripcionRef}
             className="inp"
             rows={3}
             defaultValue={p.descripcion}
             disabled={bloqueado}
-            placeholder="Qué se ha hecho, con el detalle suficiente para que lo entienda quien no estuvo allí."
+            placeholder='Dicta con tus propias cifras: "He tardado 2 horas en cambiar la grifería de la ducha. He usado un grifo monomando Roca y dos metros de tubo de cobre."'
             onBlur={(e) => commit({ descripcion: e.target.value })}
           />
+          {!bloqueado && (
+            <div className="row" style={{ marginTop: 8 }}>
+              <button className="btn sm ghost" disabled={generandoIA} onClick={generarConIA}>
+                {generandoIA && !previaIA ? "Estructurando…" : "Generar líneas con IA a partir de esto"}
+              </button>
+              <p className="hint" style={{ margin: 0 }}>
+                La IA solo ordena lo que dictes aquí: las horas o cantidades que no digas se quedan en blanco para
+                que las rellenes tú. No inventa material ni tareas que no hayas nombrado.
+              </p>
+            </div>
+          )}
+          {errorIA && <p className="error" style={{ marginTop: 6 }}>{errorIA}</p>}
         </div>
+
+        {previaIA && (
+          <div
+            style={{ border: "1px solid var(--amber)", background: "#FFFBF0", borderRadius: 8, padding: 12, marginBottom: 14 }}
+          >
+            <strong style={{ fontSize: 14 }}>Revisa esto antes de añadirlo al parte</strong>
+            {previaIA.aplicadas.length > 0 && (
+              <p className="hint" style={{ margin: "4px 0 0" }}>
+                Se han aplicado tus precios del catálogo en: {previaIA.aplicadas.join(", ")}.
+              </p>
+            )}
+            {previaIA.revisar.length > 0 && (
+              <ul style={{ margin: "6px 0 0 18px", fontSize: 13 }}>
+                {previaIA.revisar.map((a, i) => (
+                  <li key={i}>{a}</li>
+                ))}
+              </ul>
+            )}
+            <table className="t" style={{ marginTop: 10, background: "#fff" }}>
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>Concepto</th>
+                  <th>{"Horas / cant."}</th>
+                  <th>Ud.</th>
+                  <th>Precio</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {previaIA.lineas.map((l) => (
+                  <tr key={l.key} style={!l.cantidad ? { background: "#FCF0D8" } : undefined}>
+                    <td>{ETIQUETA_TIPO_LINEA[l.tipo]}</td>
+                    <td>
+                      <input
+                        className="inp"
+                        value={l.concepto}
+                        onChange={(e) => editarPreviaIA(l.key, { concepto: e.target.value })}
+                      />
+                    </td>
+                    <td style={{ width: 90 }}>
+                      <input
+                        className="inp"
+                        type="number"
+                        step="0.5"
+                        value={l.cantidad}
+                        onChange={(e) => editarPreviaIA(l.key, { cantidad: Number(e.target.value) })}
+                      />
+                    </td>
+                    <td style={{ width: 70 }}>
+                      <input
+                        className="inp"
+                        value={l.unidad}
+                        onChange={(e) => editarPreviaIA(l.key, { unidad: e.target.value })}
+                      />
+                    </td>
+                    <td style={{ width: 90 }}>
+                      <input
+                        className="inp"
+                        type="number"
+                        step="0.01"
+                        value={l.precio}
+                        onChange={(e) => editarPreviaIA(l.key, { precio: Number(e.target.value) })}
+                      />
+                    </td>
+                    <td>
+                      <button className="btn sm red" onClick={() => quitarDePreviaIA(l.key)}>×</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="row" style={{ marginTop: 10 }}>
+              <button className="btn sm" disabled={generandoIA || !previaIA.lineas.length} onClick={confirmarPreviaIA}>
+                {generandoIA ? "Añadiendo…" : "Añadir estas líneas al parte"}
+              </button>
+              <button className="btn sm ghost" disabled={generandoIA} onClick={() => setPreviaIA(null)}>
+                Descartar
+              </button>
+              <button className="btn sm ghost" disabled={generandoIA} onClick={generarConIA}>
+                Volver a generar
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="field">
           <div className="row" style={{ justifyContent: "space-between" }}>

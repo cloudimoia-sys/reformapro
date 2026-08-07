@@ -125,6 +125,28 @@ export async function agregarLinea(parteId: string, data: LineaParteInput): Prom
 }
 
 /**
+ * Añade de golpe las líneas que ha estructurado /api/generar-parte a partir
+ * de lo que el técnico dictó.
+ *
+ * Van todas juntas y no una a una: son el resultado de una sola generación
+ * que el técnico ya ha revisado en pantalla, así que tiene sentido que
+ * aparezcan (o fallen) como un bloque. `createMany`, no un `create` por
+ * línea: una escritura en vez de N.
+ */
+export async function agregarLineasGeneradas(parteId: string, lineas: LineaParteInput[]): Promise<Resultado> {
+  return ejecutar("agregarLineasGeneradas", async () => {
+    const { db, empresaId } = await requireTenant();
+    await cargarEditable(db, parteId);
+    if (!lineas.length) return;
+    const count = await db.lineaParteTrabajo.count({ where: { parteId } });
+    await db.lineaParteTrabajo.createMany({
+      data: lineas.map((l, i) => ({ empresaId, parteId, ...l, orden: count + i })),
+    });
+    revalidatePath(`/partes/${parteId}`);
+  });
+}
+
+/**
  * Añade una línea de material a partir de una partida o material del catálogo
  * propio, igual que `agregarMaterialDelCatalogo` en presupuestos.
  *

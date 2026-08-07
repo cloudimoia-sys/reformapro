@@ -1,15 +1,26 @@
 /**
  * Comprueba los cálculos de un parte de trabajo.
  *
- * No hay ninguna IA aquí que probar: el técnico escribe las horas y el
- * material, y este fichero solo suma. Lo que sí hay que comprobar es que la
- * suma no mezcla lo que no se debe mezclar — mano de obra y material se leen
- * distinto y por eso van por separado— y que un parte sin nada no revienta.
+ * Dos cosas se prueban aquí. La suma de horas y material no mezcla lo que no
+ * se debe mezclar, y un parte sin nada no revienta. Y `lineasSinCantidad`, que
+ * es la red de seguridad de la parte con IA: al modelo se le prohíbe por
+ * prompt inventar una hora o una cantidad que el técnico no haya dicho, pero
+ * un prompt se cumple "casi siempre", y "casi" no vale en un documento que
+ * firma el cliente. Esta función es la comprobación en código de que ese
+ * "casi" no se cuela.
  *
  * Ejecutar con: npx tsx scripts/verificar-partes.ts
  */
 import { readFileSync } from "node:fs";
-import { importeLineaParte, totalesParte, estadoParteClase, estadoParteLabel, type LineaParteCalc } from "../lib/parteTrabajo";
+import {
+  importeLineaParte,
+  totalesParte,
+  estadoParteClase,
+  estadoParteLabel,
+  lineasSinCantidad,
+  type LineaParteCalc,
+  type LineaGeneradaParte,
+} from "../lib/parteTrabajo";
 
 let fallos = 0;
 const mal = (q: string, d: string) => { fallos++; console.log(`  MAL  ${q}: ${d}`); };
@@ -113,6 +124,45 @@ for (const nombre of ["Producto", "LineaParteTrabajo", "ParteTrabajo"]) {
   if (!linea.includes("String?")) mal(nombre, "el código de ERP no es opcional");
 }
 if (!fallos) bien("el código de ERP es opcional en los tres sitios donde aparece");
+
+// ───────────── La IA que estructura el dictado: red de seguridad ─────────────
+console.log("\nlineasSinCantidad: la red de seguridad de la parte con IA");
+
+const g = (tipo: "MANO_OBRA" | "MATERIAL", concepto: string, cantidad: number): LineaGeneradaParte => ({
+  tipo,
+  concepto,
+  cantidad,
+  unidad: tipo === "MANO_OBRA" ? "h" : "ud",
+  precio: 0,
+});
+
+// El caso normal: el técnico dijo un número, no hay nada que revisar.
+if (lineasSinCantidad([g("MANO_OBRA", "Montaje de grifería", 2), g("MATERIAL", "Grifo monomando", 1)]).length) {
+  mal("con cantidad", "avisa de una línea que sí tiene cantidad");
+} else bien("una línea con horas o cantidad puestas no genera ningún aviso");
+
+// El caso que importa: la IA ha dejado la cantidad a 0 porque no se dijo.
+const sinDecir = lineasSinCantidad([g("MANO_OBRA", "Montaje de grifería", 0)]);
+if (sinDecir.length !== 1 || !/horas/.test(sinDecir[0])) {
+  mal("mano de obra sin horas", "no señala que faltan las horas, o el mensaje no habla de horas");
+} else bien("una línea de mano de obra sin horas se señala, y el mensaje habla de horas");
+
+const materialSinCantidad = lineasSinCantidad([g("MATERIAL", "Tubo de cobre", 0)]);
+if (materialSinCantidad.length !== 1 || !/cantidad/.test(materialSinCantidad[0])) {
+  mal("material sin cantidad", "no señala que falta la cantidad, o el mensaje no habla de cantidad");
+} else bien("una línea de material sin cantidad se señala, y el mensaje habla de cantidad");
+
+// Un número negativo (una IA divagando podría devolver uno) cuenta igual que
+// "sin decir": nunca se acepta como si fuera una cantidad real.
+if (lineasSinCantidad([g("MATERIAL", "Silicona", -1)]).length !== 1) {
+  mal("cantidad negativa", "una cantidad negativa no se trata como «sin decir»");
+} else bien("una cantidad negativa se trata igual que si no se hubiera dicho nada");
+
+// Con varias líneas, se señalan solo las que de verdad faltan.
+const mixto = lineasSinCantidad([g("MANO_OBRA", "Tarea A", 3), g("MANO_OBRA", "Tarea B", 0), g("MATERIAL", "Pieza", 2)]);
+if (mixto.length !== 1) {
+  mal("mixto", `debía señalar 1 línea de 3 y señaló ${mixto.length}`);
+} else bien("con varias líneas, solo se señalan las que de verdad no tienen cantidad");
 
 console.log("");
 if (fallos) {
