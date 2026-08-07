@@ -16,10 +16,11 @@ const CAMPOS: [keyof ClienteInput, string][] = [
   ["poblacion", "Población"],
   ["provincia", "Provincia"],
   ["nif", "NIF"],
+  ["codigoErp", "Código en tu ERP (ExitERP u otro)"],
   ["notas", "Notas"],
 ];
 
-const VACIO: ClienteInput = { nombre: "", tel: "", email: "", direccion: "", codigoPostal: "", poblacion: "", provincia: "", nif: "", notas: "" };
+const VACIO: ClienteInput = { nombre: "", tel: "", email: "", direccion: "", codigoPostal: "", poblacion: "", provincia: "", nif: "", codigoErp: "", notas: "" };
 
 export default function ClientesClient({ clientes, isAdmin }: { clientes: Cliente[]; isAdmin: boolean }) {
   const router = useRouter();

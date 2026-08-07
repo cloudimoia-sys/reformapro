@@ -14,6 +14,10 @@ export type ClienteInput = {
   poblacion: string;
   provincia: string;
   nif: string;
+  /// Código de este cliente en el ERP externo de la empresa (ExitERP u otro).
+  /// Ver el comentario de ParteTrabajo.codigoErp en el esquema: no hay
+  /// sincronización automática, es para casarlo a mano al exportar.
+  codigoErp: string;
   notas: string;
 };
 
@@ -46,9 +50,18 @@ export async function borrarCliente(id: string): Promise<Resultado> {
     // (id, empresaId) eso ya no vale: SET NULL anularía también empresaId, que es
     // NOT NULL, y el borrado fallaría. Así que desvinculamos explícitamente y luego
     // borramos, todo en una transacción para que no quede a medias.
+    //
+    // Informe y Obra tenían el mismo `onDelete: NoAction` que Presupuesto y
+    // Factura, pero no estaban aquí: borrar un cliente con algún informe o alguna
+    // obra fallaba con un error de restricción en bruto en vez del mensaje en
+    // español de siempre. Se descubrió al añadir ParteTrabajo, que sigue el mismo
+    // patrón — así que de paso se completan los dos que faltaban.
     await db.$transaction(async (tx) => {
       await tx.presupuesto.updateMany({ where: { clienteId: id }, data: { clienteId: null } });
       await tx.factura.updateMany({ where: { clienteId: id }, data: { clienteId: null } });
+      await tx.informe.updateMany({ where: { clienteId: id }, data: { clienteId: null } });
+      await tx.obra.updateMany({ where: { clienteId: id }, data: { clienteId: null } });
+      await tx.parteTrabajo.updateMany({ where: { clienteId: id }, data: { clienteId: null } });
       const r = await tx.cliente.deleteMany({ where: { id } });
       if (r.count === 0) throw new Error("Cliente no encontrado");
     });

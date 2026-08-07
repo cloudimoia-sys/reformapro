@@ -50,7 +50,7 @@ type ClienteConCounter = {
  * histórico, y al no ser una serie fiscal, mezclar prefijos no tiene ninguna
  * consecuencia.
  */
-const PREFIJOS = { presupuesto: "PRE", factura: "ALB", informe: "INF" } as const;
+const PREFIJOS = { presupuesto: "PRE", factura: "ALB", informe: "INF", parte: "PT" } as const;
 
 export async function siguienteNumero(
   empresaId: string,

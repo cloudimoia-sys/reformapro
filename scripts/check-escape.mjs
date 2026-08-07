@@ -18,7 +18,7 @@
  */
 import { readFileSync } from "fs";
 
-const FICHEROS = ["lib/docExport.ts", "lib/informeExport.ts"];
+const FICHEROS = ["lib/docExport.ts", "lib/informeExport.ts", "lib/parteExport.ts"];
 const problemas = [];
 
 for (const ruta of FICHEROS) {

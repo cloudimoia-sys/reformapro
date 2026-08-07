@@ -126,6 +126,40 @@ Vía sin coste: hosting en Vercel (gratis para este volumen) + Postgres en Neon 
 - `lib/` — helpers compartidos (Prisma client, sesión/roles, numeración de presupuestos/facturas, formato, exportación a PDF/Word/Excel).
 - `components/` — `SignaturePad` (firma en canvas) y `WizardIA` (asistente IA), ambos client components.
 
+## Partes de trabajo y el código de ERP
+
+Un **parte de trabajo** (`/partes`) registra lo que de verdad ha pasado en una
+visita: horas por técnico, trabajo realizado, material puesto y fotos. No es un
+presupuesto —eso se estima antes de la obra— ni una factura —eso la emite el
+programa de facturación del cliente—.
+
+**El material lo rellena el técnico, y no hay ninguna IA en este módulo.** Es
+deliberado: nadie más sabe qué material ha entrado en la obra, y una IA
+"proponiendo" material sería inventarlo. Lo que sí hace la aplicación es
+ofrecerle el catálogo propio de la empresa, para que lo elija con su precio ya
+puesto en vez de teclearlo.
+
+### Por qué NO hay integración automática con ExitERP
+
+Hay un campo `codigoErp` en los partes y en los clientes, y una columna propia
+en la exportación a Excel. Lo que **no** hay es una sincronización en vivo, y no
+es por falta de ganas:
+
+- ExitERP no publica una API documentada con la que esta aplicación pueda
+  hablar. Sin sus documentos, sus credenciales de prueba o su cooperación, no
+  hay nada real que construir.
+- Escribir un conector "a ciegas" contra un formato que no se puede probar es
+  peor que no tenerlo: parece que funciona hasta el día en que un cliente
+  descubre que los datos no cuadran.
+
+Lo que **sí** funciona hoy, que es la misma solución que ya se tomó para
+facturación: el código se anota (a mano, o se deja vacío y se rellena después) y
+la exportación a Excel lo saca en su propia columna. Administración cruza los
+partes por ese código en lugar de teclearlos otra vez.
+
+Si algún día se consigue documentación de ExitERP, el sitio donde engancharla ya
+está preparado: el campo existe, viaja en las exportaciones y tiene índice.
+
 ## Roles
 
 - **Admin**: todo, incluida facturación, equipo y datos de empresa.

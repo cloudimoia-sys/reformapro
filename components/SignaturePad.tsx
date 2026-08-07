@@ -2,12 +2,26 @@
 
 import { useEffect, useRef, useState } from "react";
 
+/**
+ * Recuadro de firma, compartido por presupuestos y partes de trabajo.
+ *
+ * El texto es configurable porque lo que el cliente firma NO es lo mismo en los
+ * dos sitios, y decirlo mal en un papel que alguien firma no es un detalle de
+ * redacción: en un presupuesto aprueba un precio ANTES de la obra, y en un
+ * parte de trabajo da su conformidad a un trabajo YA hecho. Con el texto fijo
+ * de presupuesto, un cliente firmaba "para aprobar el presupuesto" debajo de
+ * unas horas que ya se habían trabajado.
+ */
 export default function SignaturePad({
   onSave,
   onCancel,
+  explicacion = "El cliente firma aquí con el dedo o el ratón para aprobar el presupuesto.",
+  textoConfirmar = "Confirmar aprobación",
 }: {
   onSave: (dataUrl: string) => void;
   onCancel: () => void;
+  explicacion?: string;
+  textoConfirmar?: string;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
@@ -58,7 +72,7 @@ export default function SignaturePad({
 
   return (
     <div>
-      <p className="hint">El cliente firma aquí con el dedo o el ratón para aprobar el presupuesto.</p>
+      <p className="hint">{explicacion}</p>
       <canvas
         ref={ref}
         className="sig-canvas"
@@ -76,7 +90,7 @@ export default function SignaturePad({
         <div className="spacer" />
         <button className="btn ghost sm" onClick={onCancel}>Cancelar</button>
         <button className="btn amber sm" disabled={empty} onClick={() => onSave(ref.current!.toDataURL("image/png"))}>
-          Confirmar aprobación
+          {textoConfirmar}
         </button>
       </div>
     </div>

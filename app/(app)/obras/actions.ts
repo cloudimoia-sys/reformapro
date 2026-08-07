@@ -247,8 +247,15 @@ export async function regenerarTokenCalendario(obraId: string): Promise<Resultad
 export async function borrarObra(id: string): Promise<Resultado> {
   return ejecutar("borrarObra", async () => {
     const { db } = await requireTenantAdmin();
-    const r = await db.obra.deleteMany({ where: { id } });
-    if (!r.count) throw new Error("Obra no encontrada");
+    // Las fases cuelgan con onDelete: Cascade y se borran solas. Los partes de
+    // trabajo apuntan a la obra con NoAction —igual que el cliente de un
+    // presupuesto—, así que hay que desvincularlos primero o el borrado falla
+    // con un error de restricción en vez de completarse.
+    await db.$transaction(async (tx) => {
+      await tx.parteTrabajo.updateMany({ where: { obraId: id }, data: { obraId: null } });
+      const r = await tx.obra.deleteMany({ where: { id } });
+      if (!r.count) throw new Error("Obra no encontrada");
+    });
     revalidatePath("/obras");
   });
 }

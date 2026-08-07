@@ -74,6 +74,20 @@ enum EstadoObra {
   TERMINADA
 }
 
+enum EstadoParte {
+  BORRADOR
+  FIRMADO
+}
+
+/// A qué se refiere una línea del parte: horas de un técnico o material puesto en obra.
+/// Deliberadamente solo dos: el desplazamiento o cualquier otro concepto se anota
+/// como una línea de MATERIAL más (con su unidad, "ud" o "km"), en vez de abrir un
+/// tercer tipo que casi nunca se usaría distinto de los otros dos.
+enum TipoLineaParte {
+  MANO_OBRA
+  MATERIAL
+}
+
 enum PlanSuscripcion {
   PRUEBA
   BASICO
@@ -124,6 +138,9 @@ model Empresa {
   informeFotos InformeFoto[]
   obras        Obra[]
   fases        Fase[]
+  partesTrabajo      ParteTrabajo[]
+  lineasParteTrabajo LineaParteTrabajo[]
+  fotosParteTrabajo  FotoParteTrabajo[]
 }
 
 model Usuario {
@@ -157,12 +174,18 @@ model Cliente {
   poblacion    String        @default("")
   provincia    String        @default("")
   nif          String?
+  /// Código de este cliente en el ERP externo de la empresa (ExitERP u otro),
+  /// para que un parte de trabajo se pueda casar con su ficha allí en vez de
+  /// crear un cliente duplicado al importar. Se rellena a mano hasta que exista
+  /// una integración real: ver el comentario de ParteTrabajo.codigoErp.
+  codigoErp    String?
   notas        String?
   createdAt    DateTime      @default(now())
   presupuestos Presupuesto[]
   facturas     Factura[]
   informes     Informe[]
   obras        Obra[]
+  partesTrabajo ParteTrabajo[]
 
   /// Necesario para que las claves foráneas compuestas de abajo puedan apuntar al par
   /// (id, empresaId) y así Postgres impida referenciar un cliente de otra empresa.
@@ -390,6 +413,7 @@ model Obra {
   notas     String   @default("")
   createdAt DateTime @default(now())
   fases     Fase[]
+  partesTrabajo ParteTrabajo[]
 
   @@unique([id, empresaId])
   @@index([empresaId])
@@ -471,4 +495,113 @@ model Intento {
   @@index([createdAt])
   @@index([tipo, ipHash, createdAt])
   @@map("RegistroIntento")
+}
+
+/// Parte de trabajo: lo que un técnico rellena tras una visita, con las horas
+/// que ha echado, el trabajo hecho y el material que ha puesto. No es un
+/// presupuesto —eso se estima antes— ni una factura —eso la emite el programa
+/// del cliente—: es el registro de lo que de verdad ha pasado en la obra.
+model ParteTrabajo {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  /// Correlativo por empresa: cada empresa tiene su propia serie PT-2026-001.
+  numero    String
+
+  /// Código de este parte en el ERP externo (ExitERP u otro), para poder
+  /// casarlo con su ficha allí cuando se traspase.
+  ///
+  /// NO HAY INTEGRACIÓN EN VIVO CON NINGÚN ERP: ExitERP no publica una API con
+  /// la que esta aplicación pueda hablar, y sin sus documentos o su cooperación
+  /// no hay nada real que construir ahí — inventar una integración que no se
+  /// puede probar sería peor que no tener ninguna. Lo que SÍ hay es un puente
+  /// que funciona hoy: este campo se rellena a mano (o se deja vacío y se
+  /// asigna después) y la exportación a Excel lo saca en su propia columna,
+  /// lista para lo que ExitERP sepa importar. Es la misma solución que ya se
+  /// tomó con la facturación: un Excel que cualquiera sabe abrir vale más que
+  /// una integración a medias con un formato que nadie ha podido verificar.
+  codigoErp String?
+
+  clienteId String?
+  /// NoAction como en Presupuesto e Informe: en una FK compuesta, SET NULL
+  /// anularía también empresaId, que es NOT NULL.
+  cliente   Cliente? @relation(fields: [clienteId, empresaId], references: [id, empresaId], onDelete: NoAction, onUpdate: NoAction)
+
+  /// Obra a la que pertenece, si la hay. Un aviso suelto de mantenimiento no
+  /// tiene por qué estar planificado como obra.
+  obraId String?
+  obra   Obra? @relation(fields: [obraId, empresaId], references: [id, empresaId], onDelete: NoAction, onUpdate: NoAction)
+
+  titulo     String
+  direccion  String   @default("")
+  fecha      DateTime @default(now())
+  /// "09:00" / "13:30". Es lo que el cliente ve y firma —a qué hora vino el
+  /// técnico—, y va aparte de las horas de las líneas de mano de obra, que son
+  /// las que de verdad se valoran (pueden ser varios técnicos con horarios
+  /// distintos el mismo parte).
+  horaInicio String?
+  horaFin    String?
+
+  /// Quien ha hecho el trabajo. Texto libre y no una relación a Usuario: un
+  /// parte lo puede firmar un autónomo subcontratado que no tiene cuenta en la
+  /// aplicación, igual que el "perito" de un informe.
+  tecnico String @default("")
+  /// Quien lo ha creado en la aplicación, que no siempre es el mismo técnico
+  /// (la oficina puede rellenar el parte que le ha dictado por teléfono).
+  autor   String?
+
+  descripcion   String @default("")
+  observaciones String @default("")
+
+  firma      String?
+  fechaFirma DateTime?
+  firmaIp    String?
+
+  estado    EstadoParte @default(BORRADOR)
+  createdAt DateTime    @default(now())
+
+  lineas LineaParteTrabajo[]
+  fotos  FotoParteTrabajo[]
+
+  @@unique([empresaId, numero])
+  @@unique([id, empresaId])
+  @@index([empresaId])
+  @@index([clienteId, empresaId])
+  @@index([obraId, empresaId])
+}
+
+model LineaParteTrabajo {
+  id        String       @id @default(cuid())
+  empresaId String
+  empresa   Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  parteId   String
+  parte     ParteTrabajo @relation(fields: [parteId, empresaId], references: [id, empresaId], onDelete: Cascade)
+
+  tipo TipoLineaParte @default(MATERIAL)
+
+  concepto    String
+  descripcion String?
+  /// En una línea de MANO_OBRA son las horas; en una de MATERIAL, las unidades.
+  cantidad    Float
+  unidad      String
+  precio      Float
+  orden       Int    @default(0)
+
+  @@index([empresaId])
+  @@index([parteId, empresaId])
+}
+
+model FotoParteTrabajo {
+  id        String       @id @default(cuid())
+  empresaId String
+  empresa   Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  parteId   String
+  parte     ParteTrabajo @relation(fields: [parteId, empresaId], references: [id, empresaId], onDelete: Cascade)
+
+  datos String
+  pie   String @default("")
+  orden Int    @default(0)
+
+  @@index([empresaId])
+  @@index([parteId, empresaId])
 }
