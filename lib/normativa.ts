@@ -163,13 +163,16 @@ export const NORMATIVA: EntradaNormativa[] = [
   {
     id: "sua1-barandilla",
     tipo: "normativa",
-    claves: ["barandilla", "baranda", "altura", "proteccion", "caida", "antepecho", "pasamanos"],
+    claves: [
+      "barandilla", "baranda", "altura", "proteccion", "caida", "antepecho",
+      "pasamanos", "ventana", "hueco", "balcon", "terraza", "desnivel",
+    ],
     tema: "Altura de las barreras de protección",
     respuesta:
-      "90 cm cuando la diferencia de cota que protegen no supera los 6 m, y 110 cm en el resto de los casos. Se mide desde el nivel del suelo o desde la línea de inclinación de la escalera.",
+      "90 cm cuando la diferencia de cota que protegen no supera los 6 m, y 110 cm en el resto de los casos. Se mide desde el nivel del suelo o desde la línea de inclinación de la escalera. Hay que proteger todo desnivel de más de 55 cm, y por eso una ventana cuyo antepecho quede por debajo de esa altura necesita protección.",
     fuente: "CTE DB-SUA 1, apartado 3.2 (Barreras de protección)",
     matiz:
-      "Además no deben poder ser escaladas: entre 30 y 50 cm de altura no puede haber salientes horizontales, y los huecos no dejarán pasar una esfera de 10 cm.",
+      "Además no deben poder ser escaladas: entre 30 y 50 cm de altura no puede haber salientes horizontales, y los huecos no dejarán pasar una esfera de 10 cm. Ese detalle es el que suele suspender una barandilla de barrotes horizontales por muy bien rematada que esté.",
   },
   {
     id: "sua9-puertas",
@@ -218,6 +221,21 @@ export const NORMATIVA: EntradaNormativa[] = [
       "REBT ITC-BT-19 (Instalaciones interiores o receptoras. Prescripciones generales), identificación de conductores, en concordancia con la norma UNE-EN 60445",
     matiz:
       "El amarillo-verde está reservado en exclusiva a la protección: usarlo de fase o de neutro es una de las cosas que un inspector no deja pasar. En instalaciones viejas te encontrarás el neutro en gris o negro, y eso hay que corregirlo al renovar.",
+  },
+  {
+    id: "rebt-protecciones-cuadro",
+    tipo: "normativa",
+    claves: [
+      "fusible", "proteccion", "cuadro", "diferencial", "magnetotermico", "pia",
+      "iga", "icp", "automatico", "tipo", "electricidad", "cgp",
+    ],
+    tema: "Qué protecciones lleva el cuadro de una vivienda",
+    respuesta:
+      "En vivienda NO se usan fusibles en el cuadro: se usan interruptores automáticos. El cuadro lleva el IGA (interruptor general automático, normalmente de 25 A o 40 A según electrificación), un interruptor diferencial de 30 mA de sensibilidad, y un pequeño interruptor automático (PIA o magnetotérmico) por cada circuito. El ICP de control de potencia va hoy en el contador.",
+    fuente:
+      "REBT ITC-BT-17 (Dispositivos generales e individuales de mando y protección) e ITC-BT-25 (Instalaciones interiores en viviendas)",
+    matiz:
+      "Los fusibles sí existen, pero aguas arriba: en la Caja General de Protección del edificio y en la centralización de contadores, donde son de cuchilla tipo gG. Si te encuentras fusibles dentro del cuadro de una vivienda, es una instalación antigua que toca renovar.",
   },
   {
     id: "rebt-cuadro-altura",
@@ -499,9 +517,22 @@ function mismaPalabra(a: string, b: string) {
   if (corta.length < 4) return false;
   let comun = 0;
   while (comun < corta.length && corta[comun] === larga[comun]) comun++;
-  // La raíz compartida tiene que ser casi toda la palabra corta: así "grifo" y
-  // "griferia" casan (raíz "grif"), pero "cable" y "cabecero" no (raíz "cab").
-  return comun >= 4 && comun >= corta.length - 3;
+
+  /*
+   * Dos reglas, y son estrictas por un motivo concreto: con el margen anterior
+   * (bastaba compartir 4 letras y diferir 3) "LAVABO" casaba con "LAVADERO" y
+   * con "LAVADORA", que comparten "lava". Preguntar "altura de lavabo" traía
+   * las alturas de la COCINA por delante de las del baño, y la del baño ni
+   * aparecía. Tres palabras distintas de tres aparatos distintos.
+   *
+   *   1. Plural o variación de una letra: "bano"/"banos", "altura"/"alturas".
+   *   2. Sufijo largo, pero exigiendo 5 letras de raíz: "fraguar"/"fraguado".
+   *
+   * Lo que se pierde con esto ("grifo" ya no alcanza a "griferia") se resuelve
+   * declarando las dos variantes como claves, que es explícito y no adivina.
+   */
+  if (comun >= 4 && comun >= corta.length - 1) return true;
+  return comun >= 5 && comun >= corta.length - 2;
 }
 
 /** ¿Aparece la clave en la pregunta? Las claves de varias palabras exigen todas. */

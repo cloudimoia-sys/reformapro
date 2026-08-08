@@ -117,6 +117,51 @@ ok(
   "y va como práctica, porque la composición es costumbre y no exigencia"
 );
 
+/*
+ * Segunda tanda de huecos, salidos de enseñárselo a alguien de verdad.
+ * "altura de lavabo" es el caso feo: el dato SÍ estaba cargado, pero la
+ * comparación por raíz daba por buena "lavabo" ≈ "lavadero" ≈ "lavadora"
+ * —comparten "lava"— y las alturas de la COCINA le ganaban a las del baño.
+ */
+bloque("Preguntas cortas, tal y como se escriben de verdad");
+
+const lavabo = buscarNormativa("altura de lavabo");
+ok(
+  lavabo.some((e) => e.id === "practica-alturas-fontaneria-bano"),
+  "«altura de lavabo», escrito corto y sin más contexto, encuentra las alturas del baño"
+);
+ok(
+  !lavabo.some((e) => e.id === "practica-alturas-fontaneria-cocina"),
+  "y NO se cuela la cocina: «lavabo» no es «lavadero» ni «lavadora»"
+);
+ok(
+  buscarNormativa("altura del fregadero").some(
+    (e) => e.id === "practica-alturas-fontaneria-cocina"
+  ),
+  "pero la cocina se sigue encontrando cuando se pregunta por lo suyo"
+);
+
+const fusibles = buscarNormativa("Tipos de fusible en un cuadro eléctrico.");
+ok(
+  fusibles.some((e) => e.id === "rebt-protecciones-cuadro"),
+  "«tipos de fusible en un cuadro» encuentra las protecciones del cuadro"
+);
+ok(
+  /no se usan fusibles/i.test(
+    NORMATIVA.find((e) => e.id === "rebt-protecciones-cuadro")!.respuesta
+  ),
+  "y la respuesta corrige la premisa: en vivienda el cuadro no lleva fusibles"
+);
+
+ok(
+  buscarNormativa("altura de barandilla en una ventana").some((e) => e.id === "sua1-barandilla"),
+  "«altura de barandilla en una ventana» encuentra las barreras de protección"
+);
+ok(
+  /55 cm/.test(NORMATIVA.find((e) => e.id === "sua1-barandilla")!.respuesta),
+  "y ahora dice a partir de qué desnivel hay que proteger un hueco"
+);
+
 /* ─────────────── El fallo de subcadena que ensuciaba las respuestas ─────────────── */
 
 bloque("Buscar por raíz de palabra, no por trozo de palabra");
